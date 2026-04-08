@@ -1,3 +1,4 @@
+import OptimalTransport.Subgradient
 import Mathlib.Analysis.Convex.Function
 import Mathlib.Analysis.InnerProductSpace.Basic
 import Mathlib.Order.ConditionallyCompleteLattice.Basic
@@ -55,6 +56,19 @@ real-valued `SubgradientGraph`. -/
 def ProperSubgradientGraph (Φ : E → WithTop ℝ) : Set (E × E) :=
   {p | ProperSubgradient Φ p.1 p.2}
 
+/-- A localized real-valued subgradient relation on a set `s`.
+
+This is the right notion for the effective-domain phase of the Brenier refactor: once a proper
+convex potential `Φ` is known to be finite on `s`, the representative `x ↦ (Φ x).untopD 0`
+behaves like an ordinary convex function on `s`, and its supporting-hyperplane inequalities only
+need to be checked against points of `s`. -/
+def SubgradientOn (s : Set E) (φ : E → ℝ) (x y : E) : Prop :=
+  x ∈ s ∧ ∀ ⦃z : E⦄, z ∈ s → φ x + inner ℝ y (z - x) ≤ φ z
+
+/-- The graph of the localized subgradient relation. -/
+def SubgradientGraphOn (s : Set E) (φ : E → ℝ) : Set (E × E) :=
+  {p | SubgradientOn s φ p.1 p.2}
+
 /-- A practical proper-convex predicate for `WithTop ℝ`-valued functions.
 
 The predicate says two things:
@@ -73,6 +87,12 @@ def IsProperConvex (Φ : E → WithTop ℝ) : Prop :=
 noncomputable def toRealOnEffectiveDomain (Φ : E → WithTop ℝ) :
     EffectiveDomain Φ → ℝ :=
   fun x => (Φ x).untop (WithTop.lt_top_iff_ne_top.mp x.2)
+
+/-- If `Φ` is finite everywhere, forget the `WithTop` codomain and view it as an ordinary
+real-valued potential. This is the temporary compatibility wrapper used while the rest of the
+repository is migrated from real-valued convex functions to proper convex functions. -/
+noncomputable def toRealPotential (Φ : E → WithTop ℝ) (hfin : ∀ x : E, Φ x < ⊤) : E → ℝ :=
+  fun x => (Φ x).untop (WithTop.lt_top_iff_ne_top.mp (hfin x))
 
 /-- Adding a finite real-valued perturbation to an extended-real-valued potential. -/
 def addReal (Φ : E → WithTop ℝ) (ψ : E → ℝ) : E → WithTop ℝ :=
@@ -99,6 +119,11 @@ lemma mem_EffectiveDomain {Φ : E → WithTop ℝ} {x : E} :
 @[simp]
 lemma mem_ProperSubgradientGraph {Φ : E → WithTop ℝ} {p : E × E} :
     p ∈ ProperSubgradientGraph Φ ↔ ProperSubgradient Φ p.1 p.2 :=
+  Iff.rfl
+
+@[simp]
+lemma mem_SubgradientGraphOn {s : Set E} {φ : E → ℝ} {p : E × E} :
+    p ∈ SubgradientGraphOn s φ ↔ SubgradientOn s φ p.1 p.2 :=
   Iff.rfl
 
 omit [NormedAddCommGroup E] [InnerProductSpace ℝ E] in
@@ -153,6 +178,42 @@ lemma toRealOnEffectiveDomain_eq_untopD {Φ : E → WithTop ℝ} (x : EffectiveD
   have hcoe : ((toRealOnEffectiveDomain Φ x : ℝ) : WithTop ℝ) = Φ x :=
     coe_toRealOnEffectiveDomain (Φ := Φ) x
   exact congrArg (WithTop.untopD 0) hcoe
+
+omit [NormedAddCommGroup E] [InnerProductSpace ℝ E] in
+lemma effectiveDomain_eq_univ {Φ : E → WithTop ℝ} (hfin : ∀ x : E, Φ x < ⊤) :
+    EffectiveDomain Φ = Set.univ := by
+  ext x
+  simp [EffectiveDomain, hfin x]
+
+omit [NormedAddCommGroup E] [InnerProductSpace ℝ E] in
+@[simp]
+lemma coe_toRealPotential {Φ : E → WithTop ℝ} (hfin : ∀ x : E, Φ x < ⊤) (x : E) :
+    ((toRealPotential Φ hfin x : ℝ) : WithTop ℝ) = Φ x := by
+  exact WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp (hfin x))
+
+omit [NormedAddCommGroup E] [InnerProductSpace ℝ E] in
+@[simp]
+lemma toRealPotential_eq_untopD {Φ : E → WithTop ℝ} (hfin : ∀ x : E, Φ x < ⊤) (x : E) :
+    toRealPotential Φ hfin x = (Φ x).untopD 0 := by
+  have hcoe : ((toRealPotential Φ hfin x : ℝ) : WithTop ℝ) = Φ x :=
+    coe_toRealPotential hfin x
+  exact congrArg (WithTop.untopD 0) hcoe
+
+omit [NormedAddCommGroup E] [InnerProductSpace ℝ E] in
+lemma eqOn_toRealPotential_toRealOnEffectiveDomain
+    {Φ : E → WithTop ℝ} (hfin : ∀ x : E, Φ x < ⊤) :
+    Set.EqOn (toRealPotential Φ hfin) (fun x => (Φ x).untopD 0) (EffectiveDomain Φ) := by
+  intro x hx
+  exact toRealPotential_eq_untopD hfin x
+
+/-- A global subgradient is the same thing as a localized subgradient on `Set.univ`. -/
+lemma subgradientOn_univ_iff_subgradient {φ : E → ℝ} {x y : E} :
+    SubgradientOn Set.univ φ x y ↔ Subgradient φ x y := by
+  constructor
+  · intro h z
+    exact h.2 (by simp)
+  · intro h
+    exact ⟨by simp, fun z _ => h z⟩
 
 namespace ProperSubgradient
 
@@ -254,7 +315,104 @@ lemma scale (h : ProperSubgradient Φ x y) (hκ : 0 ≤ κ) :
           (((κ * (Φ z).untop hz : ℝ) : ℝ) : WithTop ℝ))
       exact WithTop.coe_le_coe.mpr hreal'
 
+/-- Proper subgradients become ordinary localized subgradients for the real-valued representative
+`x ↦ (Φ x).untopD 0` on the effective domain. -/
+lemma subgradientOn_effectiveDomain (h : ProperSubgradient Φ x y) :
+    SubgradientOn (EffectiveDomain Φ) (fun z => (Φ z).untopD 0) x y := by
+  constructor
+  · exact h.1
+  · intro z hz
+    have hreal := h.real_inequality hz
+    have hxeq :
+        (Φ x).untopD 0 = (Φ x).untop h.ne_top := by
+      symm
+      simpa [toRealOnEffectiveDomain] using
+        (toRealOnEffectiveDomain_eq_untopD (Φ := Φ) ⟨x, h.1⟩)
+    have hzeq :
+        (Φ z).untopD 0 = (Φ z).untop (WithTop.lt_top_iff_ne_top.mp hz) := by
+      symm
+      simpa [toRealOnEffectiveDomain] using
+        (toRealOnEffectiveDomain_eq_untopD (Φ := Φ) ⟨z, hz⟩)
+    simpa [hxeq, hzeq] using hreal
+
+/-- Conversely, a localized subgradient inequality on the effective domain upgrades to a proper
+subgradient of the underlying extended-real-valued potential. Outside the effective domain the
+target value is `⊤`, so the inequality is automatic there. -/
+lemma of_subgradientOn_effectiveDomain
+    (h : SubgradientOn (EffectiveDomain Φ) (fun z => (Φ z).untopD 0) x y) :
+    ProperSubgradient Φ x y := by
+  constructor
+  · exact h.1
+  · intro z
+    by_cases hz : z ∈ EffectiveDomain Φ
+    · have hxne : Φ x ≠ ⊤ := WithTop.lt_top_iff_ne_top.mp h.1
+      have hzne : Φ z ≠ ⊤ := WithTop.lt_top_iff_ne_top.mp hz
+      have hreal := h.2 hz
+      have hxeq :
+          (Φ x).untopD 0 = (Φ x).untop hxne := by
+        symm
+        simpa [toRealOnEffectiveDomain] using
+          (toRealOnEffectiveDomain_eq_untopD (Φ := Φ) ⟨x, h.1⟩)
+      have hzeq :
+          (Φ z).untopD 0 = (Φ z).untop hzne := by
+        symm
+        simpa [toRealOnEffectiveDomain] using
+          (toRealOnEffectiveDomain_eq_untopD (Φ := Φ) ⟨z, hz⟩)
+      rw [← WithTop.coe_untop _ hxne, ← WithTop.coe_untop _ hzne, ← WithTop.coe_add]
+      exact WithTop.coe_le_coe.mpr (by simpa [hxeq, hzeq] using hreal)
+    · have hz_top : Φ z = ⊤ := by
+        by_contra hzne
+        exact hz (WithTop.lt_top_iff_ne_top.mpr hzne)
+      rw [hz_top]
+      exact le_top
+
+/-- Localized real-valued and proper subgradients agree on the effective domain. -/
+lemma subgradientOn_effectiveDomain_iff :
+    ProperSubgradient Φ x y ↔
+      SubgradientOn (EffectiveDomain Φ) (fun z => (Φ z).untopD 0) x y := by
+  constructor
+  · exact subgradientOn_effectiveDomain
+  · exact of_subgradientOn_effectiveDomain
+
 end ProperSubgradient
+
+/-- When `Φ` is finite everywhere, proper subgradients are exactly ordinary subgradients of the
+associated real-valued potential. -/
+lemma properSubgradient_iff_subgradient_toRealPotential
+    {Φ : E → WithTop ℝ} (hfin : ∀ x : E, Φ x < ⊤) {x y : E} :
+    ProperSubgradient Φ x y ↔ Subgradient (toRealPotential Φ hfin) x y := by
+  constructor
+  · intro h z
+    have hreal := ProperSubgradient.real_inequality (Φ := Φ) (x := x) (y := y) h (hfin z)
+    simpa [toRealPotential] using hreal
+  · intro h
+    constructor
+    · exact hfin x
+    · intro z
+      have hxeq : (((toRealPotential Φ hfin x : ℝ) : WithTop ℝ)) = Φ x :=
+        coe_toRealPotential hfin x
+      have hzeq : (((toRealPotential Φ hfin z : ℝ) : WithTop ℝ)) = Φ z :=
+        coe_toRealPotential hfin z
+      have hreal := h z
+      rw [← hxeq, ← hzeq, ← WithTop.coe_add]
+      exact WithTop.coe_le_coe.mpr hreal
+
+/-- Consequently, the proper and ordinary subgradient graphs agree when `Φ` is finite
+everywhere. -/
+lemma properSubgradientGraph_eq_subgradientGraph_toRealPotential
+    {Φ : E → WithTop ℝ} (hfin : ∀ x : E, Φ x < ⊤) :
+    ProperSubgradientGraph Φ = SubgradientGraph (toRealPotential Φ hfin) := by
+  ext p
+  simp [properSubgradient_iff_subgradient_toRealPotential (hfin := hfin)]
+
+/-- The localized real-valued subgradient graph on the effective domain is exactly the proper
+subgradient graph. -/
+lemma properSubgradientGraph_eq_subgradientGraphOn_effectiveDomain
+    {Φ : E → WithTop ℝ} :
+    ProperSubgradientGraph Φ =
+      SubgradientGraphOn (EffectiveDomain Φ) (fun z => (Φ z).untopD 0) := by
+  ext p
+  simp [ProperSubgradient.subgradientOn_effectiveDomain_iff]
 
 namespace IsProperConvex
 
@@ -274,6 +432,23 @@ lemma convexOn_effectiveDomain (h : IsProperConvex Φ) :
 lemma convex_effectiveDomain (h : IsProperConvex Φ) :
     Convex ℝ (EffectiveDomain Φ) :=
   h.2.1
+
+/-- If a proper convex function is finite everywhere, its real-valued wrapper is convex on the
+whole space. This is the exact compatibility theorem needed to reuse the existing real-valued
+convex-analysis layer. -/
+lemma convexOn_toRealPotential (h : IsProperConvex Φ) (hfin : ∀ x : E, Φ x < ⊤) :
+    ConvexOn ℝ Set.univ (toRealPotential Φ hfin) := by
+  have hsubset : Set.univ ⊆ EffectiveDomain Φ := by
+    intro x hx
+    simpa using hfin x
+  have hconv :
+      ConvexOn ℝ Set.univ (fun x => (Φ x).untopD 0) :=
+    h.2.subset hsubset convex_univ
+  have heq : Set.EqOn (fun x => (Φ x).untopD 0) (toRealPotential Φ hfin) Set.univ := by
+    intro x hx
+    symm
+    exact toRealPotential_eq_untopD hfin x
+  exact hconv.congr heq
 
 end IsProperConvex
 

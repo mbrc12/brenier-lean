@@ -1,6 +1,10 @@
 import OptimalTransport.Subgradient
+import OptimalTransport.ProperConvex
 import Mathlib.Data.List.Basic
+import Mathlib.MeasureTheory.Constructions.BorelSpace.Order
+import Mathlib.MeasureTheory.Constructions.BorelSpace.WithTop
 import Mathlib.Order.ConditionallyCompleteLattice.Basic
+import Mathlib.Topology.Order.WithTop
 
 namespace OptimalTransport
 
@@ -69,6 +73,170 @@ value set is bounded above. -/
 noncomputable def rockafellarPotential (base : E × E) (Γ : Set (E × E))
     (_h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)) (x : E) : ℝ :=
   sSup (rockafellarValueSet base Γ x)
+
+/-- The same rooted value set, now viewed in `WithTop ℝ`.
+
+This is the right codomain for the next Rockafellar refactor: every finite chain value is still a
+real number, but taking the supremum in `WithTop ℝ` no longer requires a global boundedness
+hypothesis. -/
+def properRockafellarValueSet (base : E × E) (Γ : Set (E × E)) (x : E) : Set (WithTop ℝ) :=
+  ((↑) : ℝ → WithTop ℝ) '' rockafellarValueSet base Γ x
+
+/-- The extended-real Rockafellar potential attached to `base` and `Γ`.
+
+Unlike `rockafellarPotential`, this version is defined with no boundedness hypothesis: the supremum
+is taken in `WithTop ℝ`, so `⊤` records precisely the points where the chain values are unbounded
+above. -/
+noncomputable def properRockafellarPotential (base : E × E) (Γ : Set (E × E)) (x : E) : WithTop ℝ :=
+  sSup (properRockafellarValueSet base Γ x)
+
+/-- Predicate selecting the rooted chains used by the Rockafellar construction. -/
+def IsRockafellarRootedChain (base : E × E) (Γ : Set (E × E)) (l : List (E × E)) : Prop :=
+  l ≠ [] ∧ l.head? = some base ∧ List.Forall (fun p ↦ p ∈ Γ) l
+
+/-- A rooted chain defines an affine `WithTop ℝ`-valued function of the endpoint variable. -/
+def properRockafellarChainFun (l : List (E × E)) : E → WithTop ℝ :=
+  fun x => ((rockafellarChainValue l x : ℝ) : WithTop ℝ)
+
+/-- The family of affine chain functionals attached to rooted chains in `Γ`. -/
+def properRockafellarFamily (base : E × E) (Γ : Set (E × E)) : Set (E → WithTop ℝ) :=
+  {f | ∃ l : List (E × E), IsRockafellarRootedChain base Γ l ∧ f = properRockafellarChainFun l}
+
+/-- The Rockafellar chain functional is continuous in the endpoint variable. -/
+lemma continuous_rockafellarChainValue : ∀ l : List (E × E), Continuous (rockafellarChainValue l)
+  | [] => by
+      simpa [rockafellarChainValue] using
+        (continuous_const : Continuous fun _x : E => (0 : ℝ))
+  | [p] => by
+      have hpair : Continuous fun x : E => (p.2, x - p.1) := by
+        exact continuous_const.prodMk (continuous_id.sub continuous_const)
+      simpa [rockafellarChainValue] using (continuous_inner.comp hpair)
+  | p :: q :: l => by
+      have hconst : Continuous fun _x : E => inner ℝ p.2 (q.1 - p.1) := continuous_const
+      simpa [rockafellarChainValue] using hconst.add (continuous_rockafellarChainValue (q :: l))
+
+/-- Each affine chain functional is continuous as a `WithTop ℝ`-valued function. -/
+lemma continuous_properRockafellarChainFun (l : List (E × E)) :
+    Continuous (properRockafellarChainFun l) := by
+  exact WithTop.continuous_coe.comp (continuous_rockafellarChainValue l)
+
+/-- Evaluating the family of chain functions at a point recovers exactly the rooted value set at
+that point. -/
+lemma image_apply_properRockafellarFamily (base : E × E) (Γ : Set (E × E)) (x : E) :
+    (fun f : E → WithTop ℝ => f x) '' properRockafellarFamily base Γ =
+      properRockafellarValueSet base Γ x := by
+  ext r
+  constructor
+  · rintro ⟨f, ⟨l, hl, rfl⟩, rfl⟩
+    rcases hl with ⟨hlne, hhead, hforall⟩
+    exact ⟨rockafellarChainValue l x, ⟨l, hlne, hhead, hforall, rfl⟩, rfl⟩
+  · rintro ⟨s, hs, rfl⟩
+    rcases hs with ⟨l, hlne, hhead, hforall, hs⟩
+    refine ⟨properRockafellarChainFun l, ?_, ?_⟩
+    · exact ⟨l, ⟨hlne, hhead, hforall⟩, rfl⟩
+    · simp [properRockafellarChainFun, hs]
+
+/-- The family of affine chain functionals has the proper Rockafellar potential as its least upper
+bound in the function order, provided the rooted singleton chain `[base]` is admissible. -/
+lemma isLUB_properRockafellarFamily {base : E × E} {Γ : Set (E × E)} (hbase : base ∈ Γ) :
+    IsLUB (properRockafellarFamily base Γ) (properRockafellarPotential base Γ) := by
+  rw [isLUB_pi]
+  intro x
+  rw [image_apply_properRockafellarFamily]
+  refine isLUB_csSup ?_ ?_
+  · refine ⟨(inner ℝ base.2 (x - base.1) : WithTop ℝ), ?_⟩
+    refine Set.mem_image_of_mem ((↑) : ℝ → WithTop ℝ) ?_
+    refine ⟨[base], by simp, by simp, ?_, by simp [rockafellarChainValue]⟩
+    simp [hbase]
+  · exact ⟨⊤, fun _ _ => le_top⟩
+
+/-- Any member of the Rockafellar family is continuous. -/
+lemma continuous_of_mem_properRockafellarFamily {base : E × E} {Γ : Set (E × E)}
+    {f : E → WithTop ℝ} (hf : f ∈ properRockafellarFamily base Γ) :
+    Continuous f := by
+  rcases hf with ⟨l, _hl, rfl⟩
+  exact continuous_properRockafellarChainFun l
+
+/-- The proper Rockafellar potential is lower semicontinuous.
+
+The proof uses the defining characterization of lower semicontinuity by strict superlevel sets.
+Since `properRockafellarPotential` is the pointwise supremum of the affine chain functionals,
+the set `{x | a < properRockafellarPotential base Γ x}` is exactly the union of the open sets
+`{x | a < f x}` over `f` in the Rockafellar family. -/
+theorem lowerSemicontinuous_properRockafellarPotential
+    {base : E × E} {Γ : Set (E × E)} (hbase : base ∈ Γ) :
+    LowerSemicontinuous (properRockafellarPotential base Γ) := by
+  have h𝓕_lub : IsLUB (properRockafellarFamily base Γ) (properRockafellarPotential base Γ) :=
+    isLUB_properRockafellarFamily hbase
+  have hLub_eval :
+      ∀ x : E,
+        IsLUB ((fun f : E → WithTop ℝ => f x) '' properRockafellarFamily base Γ)
+          (properRockafellarPotential base Γ x) := by
+    simpa [isLUB_pi] using h𝓕_lub
+  rw [lowerSemicontinuous_iff_isOpen_preimage]
+  intro a
+  have hEq :
+      (properRockafellarPotential base Γ) ⁻¹' Set.Ioi a =
+        ⋃ f ∈ properRockafellarFamily base Γ, f ⁻¹' Set.Ioi a := by
+    ext x
+    constructor
+    · intro hx
+      obtain ⟨z, hz, haz⟩ := (lt_isLUB_iff (hLub_eval x)).1 hx
+      rcases hz with ⟨f, hf, rfl⟩
+      exact Set.mem_iUnion.2 ⟨f, Set.mem_iUnion.2 ⟨hf, haz⟩⟩
+    · intro hx
+      rcases Set.mem_iUnion.1 hx with ⟨f, hx⟩
+      rcases Set.mem_iUnion.1 hx with ⟨hf, hfx⟩
+      exact lt_of_lt_of_le hfx ((hLub_eval x).1 (Set.mem_image_of_mem _ hf))
+  rw [hEq]
+  exact isOpen_biUnion fun f hf =>
+    isOpen_Ioi.preimage (continuous_of_mem_properRockafellarFamily hf)
+
+/-- The proper Rockafellar potential is measurable.
+
+This is an immediate consequence of lower semicontinuity in the ordered codomain `WithTop ℝ`. -/
+theorem measurable_properRockafellarPotential
+    [MeasurableSpace E] [BorelSpace E] [SecondCountableTopology E]
+    {base : E × E} {Γ : Set (E × E)} (hbase : base ∈ Γ) :
+    Measurable (properRockafellarPotential base Γ) := by
+  exact (lowerSemicontinuous_properRockafellarPotential hbase).measurable
+
+/-- Membership in the extended-real value set is just membership in the real value set after
+coercion. -/
+@[simp]
+lemma mem_properRockafellarValueSet {base : E × E} {Γ : Set (E × E)} {x : E} {r : WithTop ℝ} :
+    r ∈ properRockafellarValueSet base Γ x ↔
+      ∃ s : ℝ, s ∈ rockafellarValueSet base Γ x ∧ ((s : ℝ) : WithTop ℝ) = r := by
+  constructor
+  · intro hr
+    rcases hr with ⟨s, hs, rfl⟩
+    exact ⟨s, hs, rfl⟩
+  · rintro ⟨s, hs, rfl⟩
+    exact Set.mem_image_of_mem ((↑) : ℝ → WithTop ℝ) hs
+
+/-- If the root belongs to `Γ`, then the extended-real value set is nonempty as well. -/
+lemma properRockafellarValueSet_nonempty {base : E × E} {Γ : Set (E × E)} (hbase : base ∈ Γ)
+    (x : E) :
+    (properRockafellarValueSet base Γ x).Nonempty := by
+  refine ⟨(inner ℝ base.2 (x - base.1) : WithTop ℝ), ?_⟩
+  refine Set.mem_image_of_mem ((↑) : ℝ → WithTop ℝ) ?_
+  refine ⟨[base], by simp, by simp, ?_, by simp [rockafellarChainValue]⟩
+  simp [hbase]
+
+/-- The extended-real value set is always bounded above by `⊤`. -/
+lemma bddAbove_properRockafellarValueSet {base : E × E} {Γ : Set (E × E)} (x : E) :
+    BddAbove (properRockafellarValueSet base Γ x) := by
+  refine ⟨⊤, ?_⟩
+  intro r hr
+  exact le_top
+
+/-- Any explicit chain value is bounded above by the extended-real Rockafellar potential. -/
+lemma le_properRockafellarPotential_of_mem_valueSet
+    {base : E × E} {Γ : Set (E × E)} {x : E} {r : ℝ}
+    (hr : r ∈ rockafellarValueSet base Γ x) :
+    ((r : ℝ) : WithTop ℝ) ≤ properRockafellarPotential base Γ x := by
+  exact le_csSup (bddAbove_properRockafellarValueSet (base := base) (Γ := Γ) x)
+    (Set.mem_image_of_mem ((↑) : ℝ → WithTop ℝ) hr)
 
 /-- The singleton rooted chain `[base]` contributes the affine functional
 `x ↦ ⟪base.2, x - base.1⟫`. This is the basic witness used both for nonemptiness of the value sets
@@ -188,6 +356,388 @@ lemma add_inner_mem_rockafellarValueSet
     · simp at hq
       simpa [hq] using hxy
   · simp [rockafellarChainValue_concat_singleton, add_comm]
+
+/-- Closed rooted chains in `Γ` have nonpositive Rockafellar value at their root.
+
+This is the exact list-level consequence of pairing cyclical monotonicity needed by the
+proper-Rockafellar construction. It is deliberately phrased on lists rather than `Fin`-indexed
+cycles: later, once a theorem supplies this property for supports of optimal plans, the finiteness
+and containment arguments below become completely formal. -/
+def PairingClosedChainMonotone (Γ : Set (E × E)) : Prop :=
+  ∀ ⦃l : List (E × E)⦄ ⦃base : E × E⦄,
+    l ≠ [] → l.head? = some base → List.Forall (fun p ↦ p ∈ Γ) l →
+      rockafellarChainValue l base.1 ≤ 0
+
+/-- Under the closed-chain nonpositivity hypothesis, every rooted value set is bounded above by the
+affine functional `x ↦ ⟪y, x - base.1⟫` for each `(x, y) ∈ Γ`. -/
+lemma rockafellarValueSet_le_inner_of_pairingClosedChainMonotone
+    {base : E × E} {Γ : Set (E × E)}
+    (hΓ : PairingClosedChainMonotone Γ)
+    {x y : E} (hxy : (x, y) ∈ Γ)
+    {r : ℝ} (hr : r ∈ rockafellarValueSet base Γ x) :
+    r ≤ inner ℝ y (x - base.1) := by
+  rcases hr with ⟨l, hlne, hhead, hforall, rfl⟩
+  have hforall_append :
+      List.Forall (fun p ↦ p ∈ Γ) (l ++ [(x, y)]) := by
+    rw [List.forall_iff_forall_mem] at hforall ⊢
+    intro p hp
+    rw [List.mem_append] at hp
+    rcases hp with hp | hp
+    · exact hforall p hp
+    · simp at hp
+      simpa [hp] using hxy
+  have hclosed :
+      rockafellarChainValue (l ++ [(x, y)]) base.1 ≤ 0 :=
+    hΓ (l := l ++ [(x, y)]) (base := base) (by simp [hlne])
+      (by
+        rw [List.head?_append_of_ne_nil l hlne]
+        exact hhead)
+      hforall_append
+  rw [rockafellarChainValue_concat_singleton] at hclosed
+  have hrewrite : inner ℝ y (base.1 - x) = - inner ℝ y (x - base.1) := by
+    rw [sub_eq_add_neg, sub_eq_add_neg, inner_add_right, inner_add_right, inner_neg_right,
+      inner_neg_right]
+    ring
+  rw [hrewrite] at hclosed
+  linarith
+
+/-- Under the closed-chain nonpositivity hypothesis, every rooted value set is bounded above by the
+affine functional `x ↦ ⟪y, x - base.1⟫` for each `(x, y) ∈ Γ`. -/
+lemma bddAbove_rockafellarValueSet_of_pairingClosedChainMonotone
+    {base : E × E} {Γ : Set (E × E)}
+    (hΓ : PairingClosedChainMonotone Γ)
+    {x y : E} (hxy : (x, y) ∈ Γ) :
+    BddAbove (rockafellarValueSet base Γ x) := by
+  refine ⟨inner ℝ y (x - base.1), ?_⟩
+  intro r hr
+  exact rockafellarValueSet_le_inner_of_pairingClosedChainMonotone hΓ hxy hr
+
+/-- Pairing closed-chain nonpositivity makes the proper Rockafellar potential finite at every point
+of `Γ`.
+
+The proof is the standard Rockafellar estimate: append the point `(x, y)` to a rooted chain,
+close the chain back at the root, and use the closed-chain hypothesis to bound the original chain
+value by `⟪y, x - base.1⟫`. -/
+lemma properRockafellarPotential_lt_top_of_pairingClosedChainMonotone
+    {base : E × E} {Γ : Set (E × E)}
+    (hΓ : PairingClosedChainMonotone Γ) (hbase : base ∈ Γ)
+    {x y : E} (hxy : (x, y) ∈ Γ) :
+    properRockafellarPotential base Γ x < ⊤ := by
+  have h_bound :
+      ∀ r ∈ rockafellarValueSet base Γ x, r ≤ inner ℝ y (x - base.1) := by
+    intro r hr
+    exact rockafellarValueSet_le_inner_of_pairingClosedChainMonotone hΓ hxy hr
+  have h_bdd : BddAbove (rockafellarValueSet base Γ x) :=
+    bddAbove_rockafellarValueSet_of_pairingClosedChainMonotone hΓ hxy
+  rw [properRockafellarPotential, properRockafellarValueSet]
+  have hupper :
+      sSup (((↑) : ℝ → WithTop ℝ) '' rockafellarValueSet base Γ x) ≤
+        ((inner ℝ y (x - base.1) : ℝ) : WithTop ℝ) := by
+    refine csSup_le ?_ ?_
+    · rcases rockafellarValueSet_nonempty hbase x with ⟨r, hr⟩
+      exact ⟨(r : WithTop ℝ), Set.mem_image_of_mem ((↑) : ℝ → WithTop ℝ) hr⟩
+    · intro u hu
+      rcases hu with ⟨r, hr, rfl⟩
+      exact WithTop.coe_le_coe.mpr (h_bound r hr)
+  exact lt_of_le_of_lt hupper (WithTop.coe_lt_top _)
+
+/-- If the extended-real Rockafellar potential is finite at `x`, then the real value set at `x`
+is automatically bounded above by that finite value. This is the local replacement for the old
+global `h_bdd` hypothesis. -/
+lemma bddAbove_rockafellarValueSet_of_properRockafellarPotential_lt_top
+    {base : E × E} {Γ : Set (E × E)} {x : E}
+    (hfin : properRockafellarPotential base Γ x < ⊤) :
+    BddAbove (rockafellarValueSet base Γ x) := by
+  refine ⟨(properRockafellarPotential base Γ x).untop (WithTop.lt_top_iff_ne_top.mp hfin), ?_⟩
+  intro r hr
+  have hrle : ((r : ℝ) : WithTop ℝ) ≤ properRockafellarPotential base Γ x :=
+    le_properRockafellarPotential_of_mem_valueSet hr
+  rw [← WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hfin)] at hrle
+  exact WithTop.coe_le_coe.mp hrle
+
+/-- Passing to `WithTop ℝ` commutes with taking the supremum of a nonempty bounded set of real
+numbers. This is the bridge between the real `csSup` lemmas and the extended-real Rockafellar
+potential. -/
+lemma coe_csSup_eq_sSup_image_withTop {s : Set ℝ} (hs : s.Nonempty) (hb : BddAbove s) :
+    (((sSup s : ℝ) : ℝ) : WithTop ℝ) = sSup (((↑) : ℝ → WithTop ℝ) '' s) := by
+  have himage_bdd : BddAbove (((↑) : ℝ → WithTop ℝ) '' s) := by
+    rcases hb with ⟨B, hB⟩
+    refine ⟨(B : WithTop ℝ), ?_⟩
+    intro u hu
+    rcases hu with ⟨r, hr, rfl⟩
+    exact WithTop.coe_le_coe.mpr (hB hr)
+  have hupper :
+      sSup (((↑) : ℝ → WithTop ℝ) '' s) ≤ (((sSup s : ℝ) : ℝ) : WithTop ℝ) := by
+    refine csSup_le ?_ ?_
+    · rcases hs with ⟨r, hr⟩
+      exact ⟨(r : WithTop ℝ), Set.mem_image_of_mem ((↑) : ℝ → WithTop ℝ) hr⟩
+    · intro u hu
+      rcases hu with ⟨r, hr, rfl⟩
+      exact WithTop.coe_le_coe.mpr (le_csSup hb hr)
+  have hfin : sSup (((↑) : ℝ → WithTop ℝ) '' s) < ⊤ := by
+    exact lt_of_le_of_lt hupper (WithTop.coe_lt_top _)
+  have hcoe_le :
+      (((sSup s : ℝ) : ℝ) : WithTop ℝ) ≤ sSup (((↑) : ℝ → WithTop ℝ) '' s) := by
+    have hcsSup_le :
+        sSup s ≤ (sSup (((↑) : ℝ → WithTop ℝ) '' s)).untop
+          (WithTop.lt_top_iff_ne_top.mp hfin) := by
+      refine csSup_le hs ?_
+      intro r hr
+      have hrle :
+          ((r : ℝ) : WithTop ℝ) ≤ sSup (((↑) : ℝ → WithTop ℝ) '' s) := by
+        exact le_csSup himage_bdd (Set.mem_image_of_mem ((↑) : ℝ → WithTop ℝ) hr)
+      rw [← WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hfin)] at hrle
+      exact WithTop.coe_le_coe.mp hrle
+    have hthis :
+        (((sSup s : ℝ) : ℝ) : WithTop ℝ) ≤
+          (((sSup (((↑) : ℝ → WithTop ℝ) '' s)).untop
+            (WithTop.lt_top_iff_ne_top.mp hfin) : ℝ) : WithTop ℝ) :=
+      WithTop.coe_le_coe.mpr hcsSup_le
+    simpa [WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hfin)] using hthis
+  exact le_antisymm hcoe_le hupper
+
+/-- Under the old bounded-above hypothesis, the proper Rockafellar potential is finite everywhere.
+
+This is the point where the new `WithTop ℝ` construction reconnects with the old real-valued one:
+if the rooted value set at each point is bounded above, then the extended supremum never reaches
+`⊤`. -/
+lemma properRockafellarPotential_lt_top_of_bddAbove
+    {base : E × E} {Γ : Set (E × E)}
+    {h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)}
+    (hbase : base ∈ Γ) (x : E) :
+    properRockafellarPotential base Γ x < ⊤ := by
+  rw [properRockafellarPotential, properRockafellarValueSet]
+  rw [← coe_csSup_eq_sSup_image_withTop
+    (rockafellarValueSet_nonempty hbase x) (h_bdd x)]
+  exact WithTop.coe_lt_top _
+
+/-- In the bounded-above regime, the proper Rockafellar potential is just the old real-valued
+Rockafellar potential viewed inside `WithTop ℝ`. -/
+lemma properRockafellarPotential_eq_coe_rockafellarPotential
+    {base : E × E} {Γ : Set (E × E)}
+    {h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)}
+    (hbase : base ∈ Γ) (x : E) :
+    properRockafellarPotential base Γ x =
+      (((rockafellarPotential base Γ h_bdd x : ℝ) : ℝ) : WithTop ℝ) := by
+  rw [properRockafellarPotential, properRockafellarValueSet, rockafellarPotential]
+  exact (coe_csSup_eq_sSup_image_withTop
+    (rockafellarValueSet_nonempty hbase x) (h_bdd x)).symm
+
+/-- Therefore the old real-valued Rockafellar potential is exactly the real wrapper of the new
+proper potential, provided the rooted value sets are bounded above. -/
+lemma toRealPotential_properRockafellarPotential_eq_rockafellarPotential
+    {base : E × E} {Γ : Set (E × E)}
+    {h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)}
+    (hbase : base ∈ Γ) :
+    toRealPotential (properRockafellarPotential base Γ)
+      (properRockafellarPotential_lt_top_of_bddAbove
+        (base := base) (Γ := Γ) (h_bdd := h_bdd) hbase) =
+      rockafellarPotential base Γ h_bdd := by
+  funext x
+  have h_eq :
+      properRockafellarPotential base Γ x =
+        (((rockafellarPotential base Γ h_bdd x : ℝ) : ℝ) : WithTop ℝ) :=
+    properRockafellarPotential_eq_coe_rockafellarPotential
+      (base := base) (Γ := Γ) (h_bdd := h_bdd) hbase x
+  simp [toRealPotential, h_eq]
+
+/-- The extended-real Rockafellar potential is convex on its effective domain.
+
+This is the `WithTop ℝ` version of the usual statement that a supremum of affine functions is
+convex. The proof only uses finiteness at the two endpoints of the convex combination; the
+potential may still take the value `⊤` elsewhere. -/
+lemma convexOn_properRockafellarPotential
+    {base : E × E} {Γ : Set (E × E)} (hbase : base ∈ Γ) :
+    ConvexOn ℝ (EffectiveDomain (properRockafellarPotential base Γ))
+      (fun x => (properRockafellarPotential base Γ x).untopD 0) := by
+  refine ⟨?_, ?_⟩
+  · intro x hx y hy a b ha hb hab
+    let Mx : ℝ :=
+      (properRockafellarPotential base Γ x).untop (WithTop.lt_top_iff_ne_top.mp hx)
+    let My : ℝ :=
+      (properRockafellarPotential base Γ y).untop (WithTop.lt_top_iff_ne_top.mp hy)
+    have hbound :
+        ∀ r ∈ rockafellarValueSet base Γ (a • x + b • y), r ≤ a * Mx + b * My := by
+      intro r hr
+      rcases hr with ⟨l, hlne, hhead, hforall, rfl⟩
+      have hlx :
+          rockafellarChainValue l x ≤ Mx := by
+        have hle :
+            ((rockafellarChainValue l x : ℝ) : WithTop ℝ) ≤ properRockafellarPotential base Γ x :=
+          le_properRockafellarPotential_of_mem_valueSet
+            ⟨l, hlne, hhead, hforall, rfl⟩
+        rw [show properRockafellarPotential base Γ x = ((Mx : ℝ) : WithTop ℝ) by
+          exact (WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hx)).symm] at hle
+        exact WithTop.coe_le_coe.mp hle
+      have hly :
+          rockafellarChainValue l y ≤ My := by
+        have hle :
+            ((rockafellarChainValue l y : ℝ) : WithTop ℝ) ≤ properRockafellarPotential base Γ y :=
+          le_properRockafellarPotential_of_mem_valueSet
+            ⟨l, hlne, hhead, hforall, rfl⟩
+        rw [show properRockafellarPotential base Γ y = ((My : ℝ) : WithTop ℝ) by
+          exact (WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hy)).symm] at hle
+        exact WithTop.coe_le_coe.mp hle
+      rw [rockafellarChainValue_convexCombination l x y a b hab]
+      nlinarith
+    have hcombo_le :
+        properRockafellarPotential base Γ (a • x + b • y) ≤
+          (((a * Mx + b * My : ℝ) : ℝ) : WithTop ℝ) := by
+      refine csSup_le (properRockafellarValueSet_nonempty hbase (a • x + b • y)) ?_
+      intro u hu
+      rcases hu with ⟨r, hr, rfl⟩
+      exact WithTop.coe_le_coe.mpr (hbound r hr)
+    have hcombo_fin :
+        properRockafellarPotential base Γ (a • x + b • y) < ⊤ :=
+      lt_of_le_of_lt hcombo_le (WithTop.coe_lt_top _)
+    exact hcombo_fin
+  · intro x hx y hy a b ha hb hab
+    let Mx : ℝ :=
+      (properRockafellarPotential base Γ x).untop (WithTop.lt_top_iff_ne_top.mp hx)
+    let My : ℝ :=
+      (properRockafellarPotential base Γ y).untop (WithTop.lt_top_iff_ne_top.mp hy)
+    have hbound :
+        ∀ r ∈ rockafellarValueSet base Γ (a • x + b • y), r ≤ a * Mx + b * My := by
+      intro r hr
+      rcases hr with ⟨l, hlne, hhead, hforall, rfl⟩
+      have hlx :
+          rockafellarChainValue l x ≤ Mx := by
+        have hle :
+            ((rockafellarChainValue l x : ℝ) : WithTop ℝ) ≤ properRockafellarPotential base Γ x :=
+          le_properRockafellarPotential_of_mem_valueSet
+            ⟨l, hlne, hhead, hforall, rfl⟩
+        rw [show properRockafellarPotential base Γ x = ((Mx : ℝ) : WithTop ℝ) by
+          exact (WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hx)).symm] at hle
+        exact WithTop.coe_le_coe.mp hle
+      have hly :
+          rockafellarChainValue l y ≤ My := by
+        have hle :
+            ((rockafellarChainValue l y : ℝ) : WithTop ℝ) ≤ properRockafellarPotential base Γ y :=
+          le_properRockafellarPotential_of_mem_valueSet
+            ⟨l, hlne, hhead, hforall, rfl⟩
+        rw [show properRockafellarPotential base Γ y = ((My : ℝ) : WithTop ℝ) by
+          exact (WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hy)).symm] at hle
+        exact WithTop.coe_le_coe.mp hle
+      rw [rockafellarChainValue_convexCombination l x y a b hab]
+      nlinarith
+    have hcombo_le :
+        properRockafellarPotential base Γ (a • x + b • y) ≤
+          (((a * Mx + b * My : ℝ) : ℝ) : WithTop ℝ) := by
+      refine csSup_le (properRockafellarValueSet_nonempty hbase (a • x + b • y)) ?_
+      intro u hu
+      rcases hu with ⟨r, hr, rfl⟩
+      exact WithTop.coe_le_coe.mpr (hbound r hr)
+    have hcombo_fin :
+        properRockafellarPotential base Γ (a • x + b • y) < ⊤ :=
+      lt_of_le_of_lt hcombo_le (WithTop.coe_lt_top _)
+    have hreal :
+        (properRockafellarPotential base Γ (a • x + b • y)).untop
+            (WithTop.lt_top_iff_ne_top.mp hcombo_fin) ≤
+          a * Mx + b * My := by
+      rw [← WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hcombo_fin)] at hcombo_le
+      exact WithTop.coe_le_coe.mp hcombo_le
+    have hxreal :
+        (properRockafellarPotential base Γ x).untopD 0 = Mx := by
+      exact (toRealOnEffectiveDomain_eq_untopD
+        (Φ := properRockafellarPotential base Γ) ⟨x, hx⟩).symm
+    have hyreal :
+        (properRockafellarPotential base Γ y).untopD 0 = My := by
+      exact (toRealOnEffectiveDomain_eq_untopD
+        (Φ := properRockafellarPotential base Γ) ⟨y, hy⟩).symm
+    have hcomboreal :
+        (properRockafellarPotential base Γ (a • x + b • y)).untop
+            (WithTop.lt_top_iff_ne_top.mp hcombo_fin) =
+          (properRockafellarPotential base Γ (a • x + b • y)).untopD 0 := by
+      exact toRealOnEffectiveDomain_eq_untopD
+        (Φ := properRockafellarPotential base Γ) ⟨a • x + b • y, hcombo_fin⟩
+    simpa [hxreal, hyreal, hcomboreal, smul_eq_mul] using hreal
+
+/-- Once one knows that the proper Rockafellar potential is finite at some point, it becomes a
+proper convex function in the sense introduced in `ProperConvex.lean`. -/
+lemma isProperConvex_properRockafellarPotential
+    {base : E × E} {Γ : Set (E × E)} {x : E}
+    (hbase : base ∈ Γ)
+    (hx : x ∈ EffectiveDomain (properRockafellarPotential base Γ)) :
+    IsProperConvex (properRockafellarPotential base Γ) := by
+  exact ⟨⟨x, hx⟩, convexOn_properRockafellarPotential (base := base) (Γ := Γ) hbase⟩
+
+/-- If the proper Rockafellar potential is finite at `x`, then every `(x, y) ∈ Γ` is a proper
+subgradient point of that potential.
+
+The affine lower-support inequality holds for purely formal reasons, exactly as in the real-valued
+construction. The only extra input needed in the extended-real setting is the local finiteness
+assumption at the contact point `x`. -/
+lemma properSubgradient_properRockafellarPotential_of_mem_of_lt_top
+    {base : E × E} {Γ : Set (E × E)}
+    (hbase : base ∈ Γ) {x y : E} (hxy : (x, y) ∈ Γ)
+    (hfin : properRockafellarPotential base Γ x < ⊤) :
+    ProperSubgradient (properRockafellarPotential base Γ) x y := by
+  constructor
+  · exact hfin
+  · intro z
+    let S : Set ℝ := rockafellarValueSet base Γ x
+    let c : ℝ := inner ℝ y (z - x)
+    have hS_nonempty : S.Nonempty := rockafellarValueSet_nonempty hbase x
+    have hS_bdd : BddAbove S :=
+      bddAbove_rockafellarValueSet_of_properRockafellarPotential_lt_top hfin
+    have hTc_nonempty : ((fun r : ℝ => r + c) '' S).Nonempty := by
+      rcases hS_nonempty with ⟨r, hr⟩
+      exact ⟨r + c, ⟨r, hr, rfl⟩⟩
+    have hTc_bdd : BddAbove ((fun r : ℝ => r + c) '' S) := by
+      rcases hS_bdd with ⟨B, hB⟩
+      refine ⟨B + c, ?_⟩
+      intro t ht
+      rcases ht with ⟨r, hr, rfl⟩
+      linarith [hB hr]
+    have hsup_translate :
+        sSup (((↑) : ℝ → WithTop ℝ) '' ((fun r : ℝ => r + c) '' S)) ≤
+          properRockafellarPotential base Γ z := by
+      refine csSup_le ?_ ?_
+      · rcases hTc_nonempty with ⟨t, ht⟩
+        exact ⟨(t : WithTop ℝ), Set.mem_image_of_mem ((↑) : ℝ → WithTop ℝ) ht⟩
+      · intro u hu
+        rcases hu with ⟨t, ht, rfl⟩
+        rcases ht with ⟨r, hr, htrfl⟩
+        subst htrfl
+        exact le_properRockafellarPotential_of_mem_valueSet (base := base) (Γ := Γ)
+          (add_inner_mem_rockafellarValueSet hxy hr)
+    have hmap_real :
+        sSup ((fun r : ℝ => r + c) '' S) = sSup S + c := by
+      simpa using ((OrderIso.addRight c).map_csSup' (s := S) hS_nonempty hS_bdd).symm
+    have hmap :
+        (((sSup S + c : ℝ) : ℝ) : WithTop ℝ) =
+          sSup (((↑) : ℝ → WithTop ℝ) '' ((fun r : ℝ => r + c) '' S)) := by
+      calc
+        (((sSup S + c : ℝ) : ℝ) : WithTop ℝ)
+          = (((sSup ((fun r : ℝ => r + c) '' S) : ℝ) : ℝ) : WithTop ℝ) := by
+              congr 1
+              exact hmap_real.symm
+        _ = sSup (((↑) : ℝ → WithTop ℝ) '' ((fun r : ℝ => r + c) '' S)) := by
+              exact coe_csSup_eq_sSup_image_withTop hTc_nonempty hTc_bdd
+    have hxeq :
+        properRockafellarPotential base Γ x = (((sSup S : ℝ) : ℝ) : WithTop ℝ) := by
+      symm
+      exact coe_csSup_eq_sSup_image_withTop hS_nonempty hS_bdd
+    rw [hxeq]
+    rw [← WithTop.coe_add]
+    rw [hmap]
+    exact hsup_translate
+
+/-- Under the closed-chain nonpositivity hypothesis, the support set `Γ` is contained in the
+proper subgradient graph of the proper Rockafellar potential.
+
+This is the proper extended-real Rockafellar containment theorem in the migrated API. The only
+nonformal input is the pointwise finiteness result from
+`properRockafellarPotential_lt_top_of_pairingClosedChainMonotone`; once that is available, the
+subgradient inequality itself is exactly the same append-a-point argument as in the bounded
+real-valued construction. -/
+lemma subset_ProperSubgradientGraph_properRockafellarPotential_of_pairingClosedChainMonotone
+    {base : E × E} {Γ : Set (E × E)}
+    (hΓ : PairingClosedChainMonotone Γ) (hbase : base ∈ Γ) :
+    Γ ⊆ ProperSubgradientGraph (properRockafellarPotential base Γ) := by
+  intro p hp
+  exact properSubgradient_properRockafellarPotential_of_mem_of_lt_top hbase hp
+    (properRockafellarPotential_lt_top_of_pairingClosedChainMonotone hΓ hbase hp)
 
 /-- Every point of `Γ` is a subgradient of the rooted Rockafellar potential.
 

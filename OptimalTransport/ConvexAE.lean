@@ -1,5 +1,6 @@
-import OptimalTransport.Subgradient
+import OptimalTransport.ProperConvex
 import Mathlib.Analysis.Convex.Continuous
+import Mathlib.Analysis.Convex.Measure
 import Mathlib.Analysis.Calculus.Rademacher
 import Mathlib.Analysis.Calculus.Gradient.Basic
 import Mathlib.Analysis.Calculus.LocalExtr.Basic
@@ -68,6 +69,112 @@ theorem ConvexOn.ae_differentiableAt {f : E → ℝ} (hf : ConvexOn ℝ univ f) 
   rcases mem_iUnion.1 hxcover with ⟨n, hxn⟩
   exact hx n hxn
 
+/-- A convex real-valued function on an open convex set is differentiable almost everywhere on that
+open set.
+
+The proof is a localized version of `ConvexOn.ae_differentiableAt`. We exhaust the open set by the
+compact sets
+
+`Kₙ = closedBall 0 n ∩ {x | 1 / (n + 1) ≤ infDist x sᶜ}`.
+
+Each `Kₙ` is compact and contained in `s`, so local Lipschitz continuity on `s` upgrades to a
+global Lipschitz bound on `Kₙ`; Rademacher then gives differentiability almost everywhere on `Kₙ`.
+The interiors of these compact sets cover `s`, thanks to the positive distance to the complement of
+an open set. -/
+theorem ConvexOn.ae_differentiableAt_of_isOpen {s : Set E} {f : E → ℝ}
+    (hs : IsOpen s) (hf : ConvexOn ℝ s f) :
+    ∀ᵐ x ∂μ, x ∈ s → DifferentiableAt ℝ f x := by
+  by_cases hsu : s = Set.univ
+  · subst hsu
+    filter_upwards [OptimalTransport.ConvexOn.ae_differentiableAt (μ := μ) hf] with x hx _
+    exact hx
+  have hscomp_nonempty : (sᶜ : Set E).Nonempty := by
+    by_contra hsempty
+    apply hsu
+    ext x
+    by_cases hx : x ∈ s
+    · simp [hx]
+    · exfalso
+      exact hsempty ⟨x, hx⟩
+  let K : ℕ → Set E := fun n =>
+    Metric.closedBall (0 : E) n ∩ {x | (1 : ℝ) / (n + 1 : ℝ) ≤ Metric.infDist x sᶜ}
+  have hK_compact : ∀ n : ℕ, IsCompact (K n) := by
+    intro n
+    have hclosed_inf :
+        IsClosed {x : E | (1 : ℝ) / (n + 1 : ℝ) ≤ Metric.infDist x sᶜ} :=
+      isClosed_le continuous_const (Metric.continuous_infDist_pt (sᶜ : Set E))
+    exact (isCompact_closedBall (0 : E) n).inter_right hclosed_inf
+  have hK_subset : ∀ n : ℕ, K n ⊆ s := by
+    intro n x hx
+    have hpos : 0 < Metric.infDist x sᶜ := by
+      have hfrac_pos : 0 < (1 : ℝ) / (n + 1 : ℝ) := by positivity
+      exact lt_of_lt_of_le hfrac_pos hx.2
+    rw [← hs.isClosed_compl.notMem_iff_infDist_pos hscomp_nonempty] at hpos
+    simpa using hpos
+  have hloc : LocallyLipschitzOn s f := hf.locallyLipschitzOn hs
+  have hpiece :
+      ∀ n : ℕ, ∀ᵐ x ∂μ, x ∈ interior (K n) → DifferentiableAt ℝ f x := by
+    intro n
+    have hlocK : LocallyLipschitzOn (K n) f := hloc.mono (hK_subset n)
+    obtain ⟨C, hC⟩ := hlocK.exists_lipschitzOnWith_of_compact (hK_compact n)
+    have hrad :
+        ∀ᵐ x ∂μ, x ∈ K n → DifferentiableWithinAt ℝ f (K n) x :=
+      hC.ae_differentiableWithinAt_of_mem (μ := μ)
+    filter_upwards [hrad] with x hx hxint
+    have hK_nhds : K n ∈ 𝓝 x := by
+      exact Filter.mem_of_superset (IsOpen.mem_nhds isOpen_interior hxint) interior_subset
+    exact (hx (interior_subset hxint)).differentiableAt
+      hK_nhds
+  have hall :
+      ∀ᵐ x ∂μ, ∀ n : ℕ, x ∈ interior (K n) → DifferentiableAt ℝ f x := by
+    rw [ae_all_iff]
+    intro n
+    exact hpiece n
+  filter_upwards [hall] with x hx hxs
+  have hdist_pos : 0 < Metric.infDist x sᶜ := by
+    rw [← hs.isClosed_compl.notMem_iff_infDist_pos hscomp_nonempty]
+    simpa using hxs
+  obtain ⟨N₁, hN₁⟩ := exists_nat_gt ‖x‖
+  obtain ⟨N₂, hN₂⟩ := exists_nat_one_div_lt hdist_pos
+  let n : ℕ := max N₁ N₂ + 1
+  have hn_norm : ‖x‖ < n := by
+    have hmax_lt : (max N₁ N₂ : ℝ) < n := by
+      exact_mod_cast Nat.lt_succ_self (max N₁ N₂)
+    calc
+      ‖x‖ < N₁ := hN₁
+      _ ≤ max N₁ N₂ := by exact_mod_cast Nat.le_max_left N₁ N₂
+      _ < n := by simpa using hmax_lt
+  have hn_inf : (1 : ℝ) / (n + 1 : ℝ) < Metric.infDist x sᶜ := by
+    have hlt_nat : N₂ + 1 < n + 1 := by
+      dsimp [n]
+      omega
+    have hlt_cast : (N₂ + 1 : ℝ) < n + 1 := by exact_mod_cast hlt_nat
+    have hone_div :
+        (1 : ℝ) / (n + 1 : ℝ) < (1 : ℝ) / (N₂ + 1 : ℝ) :=
+      one_div_lt_one_div_of_lt (by positivity) hlt_cast
+    exact hone_div.trans hN₂
+  have hxcover : x ∈ interior (K n) := by
+    have hball : x ∈ Metric.ball (0 : E) n := by
+      simpa [Metric.mem_ball, dist_eq_norm] using hn_norm
+    have hdist_open : x ∈ {z : E | (1 : ℝ) / (n + 1 : ℝ) < Metric.infDist z sᶜ} := hn_inf
+    have hopen :
+        IsOpen (Metric.ball (0 : E) n ∩
+          {z : E | (1 : ℝ) / (n + 1 : ℝ) < Metric.infDist z sᶜ}) :=
+      IsOpen.inter Metric.isOpen_ball
+        (isOpen_lt continuous_const (Metric.continuous_infDist_pt (sᶜ : Set E)))
+    have hsubset :
+        Metric.ball (0 : E) n ∩
+          {z : E | (1 : ℝ) / (n + 1 : ℝ) < Metric.infDist z sᶜ} ⊆ K n := by
+      intro z hz
+      constructor
+      · exact Metric.mem_closedBall.2 (le_of_lt hz.1)
+      · have hzinf : (1 : ℝ) / (n + 1 : ℝ) < Metric.infDist z sᶜ := by
+          simpa using hz.2
+        exact le_of_lt hzinf
+    exact mem_interior_iff_mem_nhds.2 <|
+      Filter.mem_of_superset (hopen.mem_nhds ⟨hball, hdist_open⟩) hsubset
+  exact hx n hxcover
+
 end FiniteDimensional
 
 section InnerProduct
@@ -119,6 +226,48 @@ theorem Subgradient.eq_gradient_of_hasGradientAt {φ : E → ℝ} {x y g : E}
   have hzero : inner ℝ g u - inner ℝ y u = 0 := hψ_min.hasDerivAt_eq_zero hψ_deriv
   linarith
 
+omit [MeasurableSpace E] [BorelSpace E] in
+/-- Localized version of `Subgradient.eq_gradient_of_hasGradientAt`.
+
+If `x` lies in the interior of a set `s`, then a localized supporting-hyperplane inequality on `s`
+already determines the ambient gradient at `x`. The proof is the same one-dimensional local-minimum
+argument as in the global case, using interior membership to ensure that the line
+`t ↦ x + t • u` stays inside `s` for small `t`. -/
+theorem SubgradientOn.eq_gradient_of_hasGradientAt_of_mem_interior
+    {s : Set E} {φ : E → ℝ} {x y g : E}
+    (hy : SubgradientOn s φ x y) (hx : x ∈ interior s) (hg : HasGradientAt φ g x) :
+    y = g := by
+  apply ext_inner_right ℝ
+  intro u
+  let ψ : ℝ → ℝ := fun t ↦ φ (x + t • u) - (φ x + t * inner ℝ y u)
+  have hline : HasDerivAt (fun t : ℝ ↦ x + t • u) u 0 := by
+    simpa using ((hasDerivAt_id (0 : ℝ)).smul_const u).const_add x
+  have hs_near : ∀ᶠ t in 𝓝 (0 : ℝ), x + t • u ∈ s := by
+    exact hline.continuousAt.tendsto.eventually (by simpa using mem_interior_iff_mem_nhds.mp hx)
+  have hψ_min : IsLocalMin ψ 0 := by
+    change ∀ᶠ t in 𝓝 (0 : ℝ), ψ 0 ≤ ψ t
+    filter_upwards [hs_near] with t hts
+    have hsub' : φ x + t * inner ℝ y u ≤ φ (x + t • u) := by
+      simpa [sub_eq_add_neg, real_inner_smul_right, add_assoc, add_left_comm, add_comm] using
+        hy.2 hts
+    have hnonneg : 0 ≤ ψ t := by
+      dsimp [ψ]
+      linarith
+    simpa [ψ]
+  have hcomp : HasDerivAt (fun t : ℝ ↦ φ (x + t • u)) (inner ℝ g u) 0 := by
+    have hcomp' :
+        HasDerivAt ((fun z : E ↦ φ z) ∘ fun t : ℝ ↦ x + t • u)
+          (((InnerProductSpace.toDual ℝ E) g) u) 0 := by
+      exact HasFDerivAt.comp_hasDerivAt_of_eq (x := 0) (y := x)
+        (hl := hg.hasFDerivAt) (hf := hline) (by simp)
+    simpa using hcomp'
+  have haff : HasDerivAt (fun t : ℝ ↦ φ x + t * inner ℝ y u) (inner ℝ y u) 0 := by
+    simpa using ((hasDerivAt_id (0 : ℝ)).mul_const (inner ℝ y u)).const_add (φ x)
+  have hψ_deriv : HasDerivAt ψ (inner ℝ g u - inner ℝ y u) 0 := by
+    exact hcomp.sub haff
+  have hzero : inner ℝ g u - inner ℝ y u = 0 := hψ_min.hasDerivAt_eq_zero hψ_deriv
+  linarith
+
 /-- The gradient map of a real-valued function on a finite-dimensional real inner product space is
 measurable. This is a direct corollary of the measurability of `fderiv` in `mathlib` and the
 continuous Riesz identification between vectors and continuous linear functionals. -/
@@ -133,6 +282,14 @@ theorem ConvexOn.ae_hasGradientAt {f : E → ℝ} (hf : ConvexOn ℝ univ f) :
     ∀ᵐ x ∂μ, HasGradientAt f (gradient f x) x := by
   filter_upwards [OptimalTransport.ConvexOn.ae_differentiableAt (μ := μ) hf] with x hx
   exact hx.hasGradientAt
+
+/-- On an open convex set, a convex function admits a gradient almost everywhere on that set. -/
+theorem ConvexOn.ae_hasGradientAt_of_isOpen {s : Set E} {f : E → ℝ}
+    (hs : IsOpen s) (hf : ConvexOn ℝ s f) :
+    ∀ᵐ x ∂μ, x ∈ s → HasGradientAt f (gradient f x) x := by
+  filter_upwards [OptimalTransport.ConvexOn.ae_differentiableAt_of_isOpen
+      (μ := μ) hs hf] with x hx hxs
+  exact (hx hxs).hasGradientAt
 
 end InnerProduct
 
