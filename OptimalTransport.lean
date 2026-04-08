@@ -1,0 +1,9 @@
+import OptimalTransport.Coupling
+import OptimalTransport.Cost
+import OptimalTransport.Existence
+import OptimalTransport.CyclicMonotone
+import OptimalTransport.Subgradient
+import OptimalTransport.ProperConvex
+import OptimalTransport.Rockafellar
+import OptimalTransport.ConvexAE
+import OptimalTransport.Brenier

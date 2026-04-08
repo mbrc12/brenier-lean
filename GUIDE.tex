@@ -1,0 +1,328 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{hyperref}
+
+\title{Guide to the Brenier Formalization}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{What this file explains}
+This note describes the proof architecture presently formalized in the repository
+\texttt{OptimalTransport}. It explains:
+\begin{itemize}
+\item the overall structure of the argument;
+\item the main definitions and theorems;
+\item where each step is implemented;
+\item the precise form of the current Brenier endpoint.
+\end{itemize}
+
+\section*{The target statement}
+The classical Brenier theorem for the quadratic cost says that on
+\[
+  E = \mathbb{R}^n,
+\]
+if \(\mu,\nu\) are probability measures with finite second moments and
+\(\mu \ll \mathrm{vol}\), then for every \(\kappa > 0\) there exists a convex
+function \(\phi : E \to \mathbb{R}\) such that
+\[
+  (\nabla \phi)_{\#}\mu = \nu,
+\]
+and the graph plan
+\[
+  (\mathrm{id}, \nabla \phi)_{\#}\mu
+\]
+is the optimal coupling for the cost
+\[
+  c_\kappa(x,y) = \kappa \|x-y\|^2.
+\]
+
+In the present repository, the final theorem has been packaged in a slightly more explicit form:
+the last remaining nontrivial support hypothesis is isolated as
+\texttt{Coupling.HasRockafellarBound}. Under that hypothesis, the rest of the Brenier proof is
+formalized completely.
+
+\section*{Repository map}
+\subsection*{1. Couplings and costs}
+\begin{itemize}
+\item \texttt{OptimalTransport/Coupling.lean}
+
+Defines:
+\[
+  \texttt{TransportPlan}\ X\ Y := \mathcal P(X \times Y),
+\]
+the marginals \(\pi \mapsto \pi_1,\pi_2\), graph plans, and the type
+\(\texttt{Coupling}\ \mu\ \nu\).
+
+\item \texttt{OptimalTransport/Cost.lean}
+
+Defines the two transport cost functionals:
+\[
+  \texttt{transportCostENNReal}(c,\pi)
+  = \int c\, d\pi,
+\]
+for \(c : X \to Y \to \mathbb R_{\ge 0}^{\infty}\), and the real-valued refinement
+\[
+  \texttt{transportCost}(c,\pi)
+  = \int c\, d\pi.
+\]
+This file also defines:
+\[
+  \texttt{HasFiniteSecondMoment}(\mu),
+  \qquad
+  \texttt{quadraticCost}\ \kappa(x,y)=\kappa\|x-y\|^2.
+\]
+\end{itemize}
+
+\subsection*{2. Existence of optimal plans}
+\begin{itemize}
+\item \texttt{OptimalTransport/Existence.lean}
+
+This file proves existence of optimal couplings on Polish spaces for lower semicontinuous
+\(\mathbb R_{\ge 0}^{\infty}\)-valued costs.
+
+The strategy is the standard Villani strategy:
+\begin{enumerate}
+\item define the fixed-marginal set \(\Gamma(\mu,\nu)\);
+\item prove it is closed;
+\item prove it is tight by the estimate
+  \[
+    \pi((K \times L)^c) \le \mu(K^c) + \nu(L^c);
+  \]
+\item apply Prokhorov to get compactness;
+\item prove lower semicontinuity of the cost by Portmanteau and truncation;
+\item minimize on the compact set.
+\end{enumerate}
+
+The main theorem is
+\[
+  \texttt{exists\_optimalCoupling\_of\_isLowerSemicontinuousCost}.
+\]
+\end{itemize}
+
+\subsection*{3. Cyclical monotonicity and subgradients}
+\begin{itemize}
+\item \texttt{OptimalTransport/CyclicMonotone.lean}
+
+Defines \(c\)-cyclical monotonicity:
+\[
+  \texttt{CCyclicallyMonotone}\ c\ \Gamma.
+\]
+It also proves the algebraic rewriting lemma
+\[
+  \texttt{cCyclicallyMonotone\_of\_pairing},
+\]
+which turns costs of the form
+\[
+  a(x)+b(y)-\kappa\langle x,y\rangle
+\]
+into the pairing inequality.
+
+\item \texttt{OptimalTransport/Subgradient.lean}
+
+Defines the subgradient relation
+\[
+  y \in \partial \phi(x)
+  \iff
+  \forall z,\ \phi(x)+\langle y,z-x\rangle \le \phi(z),
+\]
+as \texttt{Subgradient \(\phi\) x y}, and its graph
+\texttt{SubgradientGraph \(\phi\)}.
+
+This file proves:
+\begin{itemize}
+\item affine and scaling rules for subgradients;
+\item cyclical monotonicity of subgradient graphs;
+\item the Brenier-friendly cost specialization
+  \[
+    \texttt{cCyclicallyMonotone\_subgradientGraph\_of\_pairing}.
+  \]
+\end{itemize}
+\end{itemize}
+
+\subsection*{4. Rockafellar's construction}
+\begin{itemize}
+\item \texttt{OptimalTransport/Rockafellar.lean}
+
+This file constructs the rooted finite-chain Rockafellar potential. The basic chain functional is
+\texttt{rockafellarChainValue}, and the rooted value set is
+\[
+  \texttt{rockafellarValueSet base }\Gamma\ x.
+\]
+
+The potential itself is
+\[
+  \phi_\Gamma(x)
+  :=
+  \texttt{rockafellarPotential base }\Gamma\ h_{\mathrm{bdd}}(x)
+  =
+  \sup \texttt{ rockafellarValueSet base }\Gamma\ x.
+\]
+
+The main theorems are:
+\begin{itemize}
+\item \texttt{subset\_SubgradientGraph\_rockafellarPotential};
+\item \texttt{convexOn\_rockafellarPotential}.
+\end{itemize}
+
+These show that, once the rooted value sets are known to be bounded above, the support set is
+contained in the subgradient graph of a convex function.
+\end{itemize}
+
+\subsection*{5. Differentiability of convex potentials}
+\begin{itemize}
+\item \texttt{OptimalTransport/ConvexAE.lean}
+
+This file proves that convex functions are differentiable almost everywhere in finite-dimensional
+real spaces:
+\[
+  \texttt{ConvexOn.ae\_differentiableAt},
+  \qquad
+  \texttt{ConvexOn.ae\_hasGradientAt}.
+\]
+
+It also proves the uniqueness of the subgradient at differentiability points:
+\[
+  \texttt{Subgradient.eq\_gradient\_of\_hasGradientAt}.
+\]
+
+This is the analytic step that collapses \(\partial \phi(x)\) to \(\{\nabla \phi(x)\}\) almost
+everywhere.
+\end{itemize}
+
+\subsection*{6. From subgradient supports to maps}
+\begin{itemize}
+\item \texttt{OptimalTransport/Brenier.lean}
+
+The first part of this file proves the measure-theoretic graph lemmas:
+\begin{itemize}
+\item \texttt{ae\_mem\_graphOn\_of\_support\_subset};
+\item \texttt{TransportPlan.eq\_graph\_of\_ae\_mem\_graphOn};
+\item \texttt{Coupling.toTransportPlan\_eq\_graph\_of\_support\_subset}.
+\end{itemize}
+
+The Milestone 6 bridge is then:
+\begin{itemize}
+\item \texttt{TransportPlan.ae\_mem\_graphOn\_gradient\_of\_support\_subset\_subgradientGraph};
+\item \texttt{TransportPlan.eq\_graph\_gradient\_of\_support\_subset\_subgradientGraph};
+\item \texttt{Coupling.snd\_eq\_map\_gradient\_of\_support\_subset\_subgradientGraph}.
+\end{itemize}
+
+These results show that if \(\pi\) is supported in the subgradient graph of a convex function and
+its first marginal is absolutely continuous with respect to Haar measure, then
+\[
+  \pi = (\mathrm{id}, \nabla \phi)_{\#}\mu,
+  \qquad
+  (\nabla \phi)_{\#}\mu = \nu.
+\]
+\end{itemize}
+
+\section*{Logical structure of the proof}
+The formal proof now has the following shape.
+
+\subsection*{Step A. Start from a coupling}
+Let \(\pi \in \Pi(\mu,\nu)\).
+
+\subsection*{Step B. Put the support into a convex subgradient graph}
+Assume the support of \(\pi\) satisfies the bounded-root Rockafellar condition. Then
+\texttt{Rockafellar.lean} builds a convex potential \(\phi\) such that
+\[
+  \operatorname{supp}(\pi) \subseteq \operatorname{Graph}(\partial \phi).
+\]
+
+\subsection*{Step C. Differentiate almost everywhere}
+Since \(\phi\) is convex, \(\phi\) is differentiable \(m\)-almost everywhere. If
+\(\mu \ll m\), then \(\phi\) is differentiable \(\mu\)-almost everywhere as well.
+
+\subsection*{Step D. Collapse subgradients to gradients}
+At those points of differentiability,
+\[
+  y \in \partial \phi(x)
+  \Longrightarrow
+  y = \nabla \phi(x).
+\]
+Hence \(\pi\) is almost surely supported on the graph of \(\nabla \phi\).
+
+\subsection*{Step E. Upgrade almost-sure graph support to exact graph-plan equality}
+Using the graph lemmas from \texttt{Brenier.lean}, one gets
+\[
+  \pi = (\mathrm{id}, \nabla \phi)_{\#}\mu.
+\]
+Taking the second marginal yields
+\[
+  (\nabla \phi)_{\#}\mu = \nu.
+\]
+
+\subsection*{Step F. Transfer optimality}
+If \(\pi\) was already known to be optimal for the quadratic cost, then the graph plan is the same
+transport plan, so it is automatically optimal as well.
+
+\section*{The present final theorem}
+The final theorem currently proved in the code is:
+\begin{quote}
+Let \(E\) be a finite-dimensional real inner product space. Let
+\(\pi \in \Pi(\mu,\nu)\) be a coupling. Assume:
+\begin{enumerate}
+\item \(\mu \ll m\), where \(m\) is an additive Haar measure;
+\item \(\pi\) is optimal for the quadratic cost \(\kappa\|x-y\|^2\);
+\item \(\pi\) satisfies \texttt{Coupling.HasRockafellarBound}.
+\end{enumerate}
+Then there exists a convex \(\phi : E \to \mathbb R\) such that
+\[
+  \pi = (\mathrm{id}, \nabla \phi)_{\#}\mu,
+  \qquad
+  (\nabla \phi)_{\#}\mu = \nu,
+\]
+and the graph plan of \(\nabla \phi\) is optimal for the same quadratic cost.
+\end{quote}
+
+The precise theorem names are:
+\begin{itemize}
+\item \texttt{Coupling.exists\_convex\_potential\_eq\_graph\_of\_hasRockafellarBound};
+\item \texttt{Coupling.exists\_convex\_potential\_of\_optimal\_quadratic\_of\_hasRockafellarBound};
+\item Euclidean specialization:
+  \texttt{Coupling.exists\_convex\_potential\_of\_optimal\_quadratic\_of\_hasRockafellarBound\_euclidean}.
+\end{itemize}
+
+\section*{What remains to reach classical Brenier}
+Only one conceptual gap remains between the present code and the classical textbook theorem.
+
+One still needs a theorem deriving the Rockafellar support hypothesis directly from optimal
+transport optimality. Concretely, the missing implication is:
+\[
+  \text{optimal quadratic coupling}
+  \Longrightarrow
+  \text{support satisfies the Rockafellar boundedness hypothesis}.
+\]
+
+In a more classical presentation, this missing step is usually supplied by:
+\begin{enumerate}
+\item optimality \(\Rightarrow\) cyclical monotonicity of the support;
+\item cyclical monotonicity \(\Rightarrow\) Rockafellar potential with the right boundedness
+  properties.
+\end{enumerate}
+
+Everything after that implication is now formalized.
+
+\section*{Where to look first}
+For a quick code walk-through, the most important theorems are:
+\begin{itemize}
+\item \texttt{OptimalTransport/Existence.lean}:
+  \texttt{exists\_optimalCoupling\_of\_isLowerSemicontinuousCost};
+\item \texttt{OptimalTransport/Rockafellar.lean}:
+  \texttt{subset\_SubgradientGraph\_rockafellarPotential},
+  \texttt{convexOn\_rockafellarPotential};
+\item \texttt{OptimalTransport/ConvexAE.lean}:
+  \texttt{ConvexOn.ae\_hasGradientAt},
+  \texttt{Subgradient.eq\_gradient\_of\_hasGradientAt};
+\item \texttt{OptimalTransport/Brenier.lean}:
+  \texttt{TransportPlan.eq\_graph\_gradient\_of\_support\_subset\_subgradientGraph},
+  \texttt{Coupling.exists\_convex\_potential\_of\_optimal\_quadratic\_of\_hasRockafellarBound}.
+\end{itemize}
+
+\end{document}
