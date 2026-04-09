@@ -1,4 +1,4 @@
-# OptimalTransport
+# Optimal Transport: Brenier's Theorem in Lean 4
 
 A formalization of **Brenier's theorem** for quadratic optimal transport in Lean 4.
 
@@ -9,7 +9,7 @@ Let $E$ be a finite-dimensional real inner product space with Borel σ-algebra a
 1. $\Phi$ is proper convex and measurable,
 2. $\pi = \mathrm{graph}_\mu(\nabla \Phi^\star)$, where $\Phi^\star(x) = (\Phi(x)).\mathrm{untopD}\;0$ is the real-valued representative,
 3. $\nu = (\nabla \Phi^\star)_\sharp\,\mu$,
-4. $\operatorname{supp}(\pi) \subseteq \partial\Phi$ (the subdifferential graph of $\Phi$).
+4. $\mathrm{supp}(\pi) \subseteq \partial\Phi$ (the subdifferential graph of $\Phi$).
 
 In words: an optimal coupling for the quadratic cost with absolutely continuous source measure is uniquely determined by the gradient of a proper convex function, simultaneously giving the Monge map $\nabla\Phi^\star$ and the pushforward identity $\nu = (\nabla\Phi^\star)_\sharp\mu$.
 
