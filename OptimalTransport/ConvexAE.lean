@@ -12,18 +12,20 @@ open MeasureTheory Set
 open scoped Gradient Topology
 
 /-!
-This file packages the analytic ingredient from Milestone 5 that is already available in
-`mathlib`: convex real-valued functions on finite-dimensional real normed spaces are locally
-Lipschitz, hence differentiable almost everywhere by Rademacher's theorem.
+This file provides the analytic ingredients for the Brenier argument from Mathlib:
 
-For the OT roadmap, the main output is the Euclidean statement needed later for Brenier:
+1. A convex real-valued function on a finite-dimensional real normed space is differentiable almost
+   everywhere with respect to any additive Haar measure. The proof combines local Lipschitz
+   continuity, compact exhaustion, and Rademacher's theorem.
 
-* a convex function on `EuclideanSpace ℝ (Fin n)` is differentiable `volume`-almost everywhere;
-* its gradient map is measurable.
+2. A localized version for convex functions on open convex subsets, since the proper-convex
+   Brenier bridge works on the interior of the effective domain.
 
-This file also contains the uniqueness bridge needed later in the map-representation argument:
-once a convex potential is differentiable at `x`, any subgradient at `x` must coincide with the
-actual gradient there.
+3. At a differentiability point, any subgradient must coincide with the gradient — this is the
+   uniqueness bridge from subgradient inclusion to gradient-map representation.
+
+4. The gradient map of a real-valued function on a finite-dimensional inner product space is
+   measurable.
 -/
 
 section FiniteDimensional

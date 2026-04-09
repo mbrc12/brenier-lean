@@ -5,19 +5,20 @@ namespace OptimalTransport
 open scoped BigOperators
 
 /-!
-This file introduces the local subgradient API needed for the convex-analysis side of the OT
-development.
+This file introduces the local subgradient API for the convex-analysis side of optimal transport.
 
-At this stage we only formalize the elementary algebraic layer:
+The main definitions and results are:
 
 * `Subgradient φ x y`: the first-order supporting-hyperplane inequality for a real-valued
   function `φ` on an inner product space;
-* `SubgradientGraph φ`: the graph of the subgradient relation;
-* basic algebraic transport lemmas for subgradients under
-  `z ↦ φ z + ⟪v, z⟫ + b` and under positive rescaling.
-
-These are exactly the manipulations that later appear when passing between convex potentials and
-the Brenier-friendly cost class `a x + b y - κ * ⟪x, y⟫`.
+* `SubgradientGraph φ`: the graph of the subgradient relation, compared later with supports of
+  optimal plans and cyclically monotone sets;
+* algebraic transport lemmas for subgradients under affine shifts `z ↦ φ z + ⟪v, z⟫ + b`
+  and under positive rescaling;
+* the pairing inequality: a finite family of subgradient points satisfies the key cyclical
+  monotonicity estimate;
+* subgradient graphs are cyclically monotone for every Brenier-friendly cost
+  `a x + b y - κ * ⟪x, y⟫` with `κ ≥ 0`.
 -/
 
 section Basic

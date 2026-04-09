@@ -10,9 +10,50 @@ namespace OptimalTransport
 
 open scoped BigOperators
 
+section AlgebraicHelpers
+
+variable {R : Type*} [AddSemigroup R]
+
+/-- Generic prefix-congruence for addition: replacing the final summand under a fixed
+three-term additive prefix preserves equality. This is purely algebraic and independent of any
+optimal-transport structure. -/
+lemma add_prefix3_congr (a b c t u : R) (h : t = u) :
+    a + b + c + t = a + b + c + u := by
+  simp [h]
+
+end AlgebraicHelpers
+
+section AlgebraicCycleSums
+
+variable {X Y : Type*}
+
+/-- Standalone cyclic finite-sum identity.
+
+This is the algebraic core used in the `rockafellarChainValue_ofFn_rev` induction: for a kernel
+`K : Y → X → ℝ` and sequences `xᵢ`, `yᵢ`, one can rewrite the cyclic successor-difference sum as a
+difference of two signed sums. No optimal-transport definitions are involved. -/
+lemma sum_succ_kernel_sub_eq_sub_sum_neg_diag_sub_sum_neg_shift
+    {n : ℕ} (K : Y → X → ℝ) (x : Fin (n + 1) → X) (y : Fin (n + 1) → Y) :
+    (∑ i, (K (y (i + 1)) (x i) - K (y (i + 1)) (x (i + 1)))) =
+      (∑ i, -K (y i) (x i)) - ∑ i, -K (y (i + 1)) (x i) := by
+  calc
+    (∑ i, (K (y (i + 1)) (x i) - K (y (i + 1)) (x (i + 1)))) =
+        (∑ i, K (y (i + 1)) (x i)) - ∑ i, K (y (i + 1)) (x (i + 1)) := by
+          simp [sub_eq_add_neg, Finset.sum_add_distrib, Finset.sum_neg_distrib]
+    _ = (∑ i, K (y (i + 1)) (x i)) - ∑ i, K (y i) (x i) := by
+          congr 1
+          simpa [Function.comp] using
+            (Equiv.sum_comp (Equiv.addRight (1 : Fin (n + 1)))
+              (fun i : Fin (n + 1) ↦ K (y i) (x i)))
+    _ = (∑ i, -K (y i) (x i)) - ∑ i, -K (y (i + 1)) (x i) := by
+          rw [Finset.sum_neg_distrib, Finset.sum_neg_distrib]
+          ring
+
+end AlgebraicCycleSums
+
 /-!
-This file implements the finite-chain Rockafellar candidate in the real-valued setting used by the
-current repository.
+This file implements the Rockafellar construction of a convex potential from a cyclically monotone
+set, in both the classical real-valued and the proper extended-real-valued settings.
 
 The key objects are:
 
@@ -20,21 +61,24 @@ The key objects are:
 * `rockafellarValueSet base Γ x`: the set of all chain values at `x`, rooted at `base` and using
   points of `Γ`;
 * `rockafellarPotential base Γ h_bdd`: the supremum of those values, assuming they are bounded
-  above for every target point `x`.
+  above for every target point `x`;
+* `properRockafellarPotential base Γ`: the supremum in `WithTop ℝ`, removing the boundedness
+  hypothesis;
+* `IsProperConvex`: the resulting potential is proper convex;
+* `PairingClosedChainMonotone Γ`: the list-based closed-chain condition derived from pairing
+  cyclical monotonicity.
 
-The current file only sets up the candidate and the basic order-theoretic lemmas that are already
-stable in the present API:
+The main results are:
 
-* singleton chains rooted at `base` give the initial nonemptiness statements;
-* appending one point to a chain has the expected algebraic effect on the chain value;
-* from this append lemma one gets the Rockafellar containment theorem
-  `Γ ⊆ SubgradientGraph φ_Γ` under the explicit bounded-above hypothesis already built into the
-  real-valued potential;
-* the resulting potential is convex.
+* Singleton chains give initial nonemptiness and finiteness at the root;
+* Appending one point to a chain has the expected algebraic effect on the chain value;
+* The Rockafellar containment theorem: under the closed-chain nonpositivity hypothesis,
+  `Γ ⊆ ProperSubgradientGraph Φ`, where `Φ` is the proper Rockafellar potential;
+* The resulting potential is convex on its effective domain.
 
-In the fully general OT story, cyclic monotonicity is used to justify the finiteness of the rooted
-value sets. In the present real-valued file we keep that finiteness as an explicit assumption
-`h_bdd`, and then prove the graph-containment theorem from the rooted supremum construction itself.
+Cyclical monotonicity is used to justify the finiteness of the rooted value sets; the
+proper-extended construction makes the boundedness assumption unnecessary by working in
+`WithTop ℝ`.
 -/
 
 section Rockafellar
@@ -74,11 +118,11 @@ noncomputable def rockafellarPotential (base : E × E) (Γ : Set (E × E))
     (_h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)) (x : E) : ℝ :=
   sSup (rockafellarValueSet base Γ x)
 
-/-- The same rooted value set, now viewed in `WithTop ℝ`.
+/-- The rooted value set viewed in `WithTop ℝ`.
 
-This is the right codomain for the next Rockafellar refactor: every finite chain value is still a
-real number, but taking the supremum in `WithTop ℝ` no longer requires a global boundedness
-hypothesis. -/
+Every finite chain value is still a real number, but taking the supremum in `WithTop ℝ` removes
+the need for a global boundedness hypothesis; `⊤` records precisely the points where the chain
+values are unbounded above. -/
 def properRockafellarValueSet (base : E × E) (Γ : Set (E × E)) (x : E) : Set (WithTop ℝ) :=
   ((↑) : ℝ → WithTop ℝ) '' rockafellarValueSet base Γ x
 
@@ -357,16 +401,288 @@ lemma add_inner_mem_rockafellarValueSet
       simpa [hq] using hxy
   · simp [rockafellarChainValue_concat_singleton, add_comm]
 
-/-- Closed rooted chains in `Γ` have nonpositive Rockafellar value at their root.
+/-- A membership witness in a list yields a decomposition around that entry. -/
+lemma list_mem_split {α : Type*} {a : α} :
+    ∀ {l : List α}, a ∈ l → ∃ s t : List α, l = s ++ a :: t
+  | [], h => by simp at h
+  | b :: l, h => by
+      rw [List.mem_cons] at h
+      rcases h with h | h
+      · subst h
+        exact ⟨[], l, rfl⟩
+      · rcases list_mem_split h with ⟨s, t, rfl⟩
+        exact ⟨b :: s, t, by simp⟩
 
-This is the exact list-level consequence of pairing cyclical monotonicity needed by the
-proper-Rockafellar construction. It is deliberately phrased on lists rather than `Fin`-indexed
-cycles: later, once a theorem supplies this property for supports of optimal plans, the finiteness
-and containment arguments below become completely formal. -/
+/-- A duplicate entry in a list yields a decomposition with two occurrences of that entry. -/
+lemma list_duplicate_split {α : Type*} {a : α} :
+    ∀ {l : List α}, List.Duplicate a l → ∃ s t u : List α, l = s ++ a :: t ++ a :: u
+  | _, List.Duplicate.cons_mem h => by
+      rcases list_mem_split h with ⟨t, u, rfl⟩
+      exact ⟨[], t, u, by simp⟩
+  | _, @List.Duplicate.cons_duplicate _ a y l h => by
+      rcases list_duplicate_split h with ⟨s, t, u, rfl⟩
+      exact ⟨y :: s, t, u, by simp [List.append_assoc]⟩
+
+/-- Concatenating a second chain of the form `q :: l₂` splits the Rockafellar value into the value
+of the first part evaluated at `q.1`, plus the value of the second chain at the final endpoint. -/
+lemma rockafellarChainValue_append_cons :
+    ∀ (l₁ : List (E × E)) (q : E × E) (l₂ : List (E × E)) (z : E),
+      rockafellarChainValue (l₁ ++ q :: l₂) z =
+        rockafellarChainValue l₁ q.1 + rockafellarChainValue (q :: l₂) z
+  | [], q, l₂, z => by
+      simp [rockafellarChainValue]
+  | [p], q, l₂, z => by
+      simp [rockafellarChainValue]
+  | p :: r :: l₁, q, l₂, z => by
+      have h :=
+        congrArg
+          (fun t => inner ℝ p.2 (r.1 - p.1) + t)
+          (rockafellarChainValue_append_cons (r :: l₁) q l₂ z)
+      simpa [rockafellarChainValue, add_assoc] using h
+
+/-- For a chain ending at `p`, changing the endpoint only changes the final affine term. -/
+lemma rockafellarChainValue_concat_singleton_endpoint
+    (l : List (E × E)) (p : E × E) (z w : E) :
+    rockafellarChainValue (l ++ [p]) z =
+      rockafellarChainValue (l ++ [p]) w + inner ℝ p.2 (z - w) := by
+  rw [rockafellarChainValue_concat_singleton, rockafellarChainValue_concat_singleton]
+  have hsub :
+      inner ℝ p.2 (z - p.1) = inner ℝ p.2 (w - p.1) + inner ℝ p.2 (z - w) := by
+    rw [← inner_add_right]
+    congr 1
+    abel
+  linarith
+
+/-- Reversing a finite cycle turns the pairing cycle-gap functional into the Rockafellar chain
+value, up to the obvious final affine correction term. -/
+lemma rockafellarChainValue_ofFn_rev
+    : ∀ {n : ℕ} (p : Fin (n + 1) → E × E) (z : E),
+        rockafellarChainValue (List.ofFn (p ∘ Fin.rev)) z =
+          cycleGap (fun x y ↦ - inner ℝ y x) p +
+            inner ℝ (p 0).2 (z - (p (Fin.last n)).1)
+  | 0, p, z => by
+      simp [cycleGap]
+  | n + 1, p, z => by
+      let q : Fin (n + 1) → E × E := fun i ↦ p (Fin.castSucc i)
+      have hp : p = Fin.snoc q (p (Fin.last (n + 1))) := by
+        funext i
+        obtain ⟨j, rfl⟩ | rfl := Fin.eq_castSucc_or_eq_last i
+        · simp [q]
+        · simp [q]
+      rw [hp]
+      rw [Fin.snoc_comp_rev]
+      rw [List.ofFn_cons]
+      have htail :
+          rockafellarChainValue (q (Fin.last n) :: List.ofFn (fun i : Fin n ↦ q i.succ.rev)) z =
+            cycleGap (fun x y ↦ - inner ℝ y x) q +
+              inner ℝ (q 0).2 (z - (q (Fin.last n)).1) :=
+        by simpa [Function.comp, List.ofFn_cons] using rockafellarChainValue_ofFn_rev q z
+      have hstart :
+          rockafellarChainValue (p (Fin.last (n + 1)) :: List.ofFn (q ∘ Fin.rev)) z =
+            inner ℝ (p (Fin.last (n + 1))).2 ((q (Fin.last n)).1 - (p (Fin.last (n + 1))).1) +
+              rockafellarChainValue (List.ofFn (q ∘ Fin.rev)) z := by
+        simp [rockafellarChainValue]
+      rw [hstart]
+      have htail' :
+          rockafellarChainValue (List.ofFn (q ∘ Fin.rev)) z =
+            cycleGap (fun x y ↦ -inner ℝ y x) q +
+              inner ℝ (q 0).2 (z - (q (Fin.last n)).1) := by
+        simpa [Function.comp, List.ofFn_cons] using htail
+      rw [htail']
+      have hcycle :
+          cycleGap (fun x y ↦ - inner ℝ y x) (Fin.snoc q (p (Fin.last (n + 1)))) =
+            cycleGap (fun x y ↦ - inner ℝ y x) q +
+              inner ℝ (p (Fin.last (n + 1))).2 ((q (Fin.last n)).1 - (p (Fin.last (n + 1))).1) +
+              inner ℝ (q 0).2 ((p (Fin.last (n + 1))).1 - (q (Fin.last n)).1) := by
+        have hsucc :
+            ∀ x : Fin n,
+              (Fin.snoc q (p (Fin.last (n + 1))) : Fin (n + 2) → E × E)
+                (x.castSucc.castSucc + 1) = q x.succ := by
+          intro x
+          have hidx : x.castSucc.castSucc + 1 = x.succ.castSucc := by
+            ext
+            simp
+          rw [hidx]
+          have hsnoc :
+              (Fin.snoc (α := fun _ : Fin (n + 2) ↦ E × E) q (p (Fin.last (n + 1))))
+                x.succ.castSucc = q x.succ :=
+            Fin.snoc_castSucc (α := fun _ : Fin (n + 2) ↦ E × E)
+              (x := p (Fin.last (n + 1))) (p := q) (i := x.succ)
+          simpa using hsnoc
+        have hlast :
+            (Fin.snoc q (p (Fin.last (n + 1))) : Fin (n + 2) → E × E) ((Fin.last n).castSucc + 1) =
+              p (Fin.last (n + 1)) := by
+          simp
+        have hzero :
+            (Fin.snoc q (p (Fin.last (n + 1))) : Fin (n + 2) → E × E) (Fin.last (n + 1) + 1) =
+              q 0 := by
+          simp
+        have hqsucc : ∀ x : Fin n, q (x.castSucc + 1) = q x.succ := by
+          intro x
+          have hidx : x.castSucc + 1 = x.succ := by
+            ext
+            simp
+          rw [hidx]
+        have hqzero : q (Fin.last n + 1) = q 0 := by
+          simp
+        rw [cycleGap, cycleGap]
+        simp only [Fin.sum_univ_castSucc, Fin.snoc_castSucc, Fin.snoc_last]
+        simp_rw [hsucc, hqsucc]
+        rw [hlast, hzero, hqzero]
+        rw [inner_sub_right, inner_sub_right]
+        ring
+      rw [hcycle]
+      have hcorr :
+          inner ℝ (q 0).2 (z - (q (Fin.last n)).1) =
+            inner ℝ (q 0).2 ((p (Fin.last (n + 1))).1 - (q (Fin.last n)).1) +
+              inner ℝ (q 0).2 (z - (p (Fin.last (n + 1))).1) := by
+        rw [← inner_add_right]
+        congr 1
+        abel
+      have hsimpTail :
+          inner ℝ (q 0).2 (z - (p (Fin.last (n + 1))).1) =
+            inner ℝ (((Fin.snoc q (p (Fin.last (n + 1))) : Fin (n + 2) → E × E) 0).2)
+              (z - (((Fin.snoc q (p (Fin.last (n + 1))) : Fin (n + 2) → E × E)
+                (Fin.last (n + 1))).1)) := by
+        simp
+      rw [hcorr]
+      rw [hsimpTail]
+      abel_nf
+
+/-- If the endpoint is the first `x`-coordinate of the reversed cycle, then the correction term in
+`rockafellarChainValue_ofFn_rev` vanishes and one recovers exactly the pairing cycle-gap. -/
+lemma rockafellarChainValue_ofFn_rev_eq_cycleGap
+    {n : ℕ} (p : Fin (n + 1) → E × E) :
+    rockafellarChainValue (List.ofFn (p ∘ Fin.rev)) (p (Fin.last n)).1 =
+      cycleGap (fun x y ↦ - inner ℝ y x) p := by
+  rw [rockafellarChainValue_ofFn_rev]
+  simp
+
+/-- Removing the segment between two equal points splits the chain value into the sum of the
+shortened outer chain and the inner rooted chain. -/
+lemma rockafellarChainValue_duplicate_split
+    (s t u : List (E × E)) (a : E × E) (z : E) :
+    rockafellarChainValue (s ++ a :: t ++ a :: u) z =
+      rockafellarChainValue (s ++ a :: u) z + rockafellarChainValue (a :: t) a.1 := by
+  rw [show s ++ a :: t ++ a :: u = s ++ a :: (t ++ a :: u) by simp [List.append_assoc]]
+  rw [rockafellarChainValue_append_cons s a (t ++ a :: u) z]
+  change rockafellarChainValue s a.1 + rockafellarChainValue ((a :: t) ++ a :: u) z =
+    rockafellarChainValue (s ++ a :: u) z + rockafellarChainValue (a :: t) a.1
+  rw [rockafellarChainValue_append_cons (a :: t) a u z]
+  rw [rockafellarChainValue_append_cons s a u z]
+  ring
+
+/-- The closed-chain list-based monotonicity condition used by the Rockafellar construction.
+
+A rooted chain `l` with head `base` and all entries in `Γ` must satisfy
+`rockafellarChainValue l base.1 ≤ 0`. This is the list-level consequence of pairing cyclical
+monotonicity; it is deliberately phrased on lists rather than `Fin`-indexed cycles, so that the
+finiteness and containment arguments in the Rockafellar construction become completely formal
+once this property is established for supports of optimal plans. -/
 def PairingClosedChainMonotone (Γ : Set (E × E)) : Prop :=
   ∀ ⦃l : List (E × E)⦄ ⦃base : E × E⦄,
     l ≠ [] → l.head? = some base → List.Forall (fun p ↦ p ∈ Γ) l →
       rockafellarChainValue l base.1 ≤ 0
+
+/-- A nodup rooted chain in `Γ` satisfies the closed-chain Rockafellar inequality as soon as `Γ`
+is pairing-cyclically monotone in the usual finite-cycle sense. -/
+lemma pairingClosedChainMonotone_of_nodup
+    {Γ : Set (E × E)}
+    (hΓ : CCyclicallyMonotone (fun x y ↦ -inner ℝ x y) Γ)
+    {l : List (E × E)} {base : E × E}
+    (hlne : l ≠ []) (hhead : l.head? = some base)
+    (hforall : List.Forall (fun p ↦ p ∈ Γ) l)
+    (hnodup : l.Nodup) :
+    rockafellarChainValue l base.1 ≤ 0 := by
+  obtain ⟨n, hlen⟩ :=
+    Nat.exists_eq_succ_of_ne_zero (Nat.ne_of_gt (List.length_pos_iff_ne_nil.mpr hlne))
+  let p : Fin (n + 1) → E × E := fun i ↦ l.get (Fin.cast hlen.symm i)
+  have hp_inj : Function.Injective p := by
+    intro i j hij
+    exact (Fin.cast_injective hlen.symm) (hnodup.injective_get hij)
+  have hp_mem : ∀ i, p i ∈ Γ := by
+    rw [List.forall_iff_forall_mem] at hforall
+    intro i
+    exact hforall _ (List.get_mem _ _)
+  have hcycle :
+      cycleGap (fun x y ↦ - inner ℝ y x) (p ∘ Fin.rev) ≤ 0 := by
+    have h :=
+      hΓ n (p ∘ Fin.rev) (hp_inj.comp Fin.rev_injective) fun i ↦ hp_mem (Fin.rev i)
+    simpa [cycleGap, real_inner_comm] using sub_nonpos.mpr h
+  have hlist : List.ofFn p = l := by
+    simpa [p, hlen] using (List.ofFn_get l)
+  have hbase_head : base = l.head hlne := by
+    apply Option.some.inj
+    rw [← hhead, List.head?_eq_some_head hlne]
+  have hbase_get : base = l.get ⟨0, by simp [hlen]⟩ := by
+    simpa [List.head_eq_getElem_zero hlne] using hbase_head
+  have hchain :
+      rockafellarChainValue l base.1 =
+        cycleGap (fun x y ↦ - inner ℝ y x) (p ∘ Fin.rev) := by
+    rw [← hlist, ← rockafellarChainValue_ofFn_rev_eq_cycleGap (p := p ∘ Fin.rev)]
+    simp [Function.comp, p, hbase_get]
+  rw [hchain]
+  exact hcycle
+
+/-- Length-induction helper for `pairingClosedChainMonotone_of_cCyclicallyMonotone_negInner`. -/
+private lemma pairingClosedChainMonotone_of_cCyclicallyMonotone_negInner_aux
+    {Γ : Set (E × E)}
+    (hΓ : CCyclicallyMonotone (fun x y ↦ -inner ℝ x y) Γ) :
+    ∀ m : ℕ, ∀ {l : List (E × E)} {base : E × E},
+      l.length = m → l ≠ [] → l.head? = some base →
+        List.Forall (fun p ↦ p ∈ Γ) l → rockafellarChainValue l base.1 ≤ 0 := by
+  let P : ℕ → Prop := fun m =>
+    ∀ {l : List (E × E)} {base : E × E},
+      l.length = m → l ≠ [] → l.head? = some base →
+        List.Forall (fun p ↦ p ∈ Γ) l → rockafellarChainValue l base.1 ≤ 0
+  intro m
+  induction m using Nat.strong_induction_on with
+  | _ m ih =>
+    intro l base hlen hlne hhead hforall
+    by_cases hnodup : l.Nodup
+    · exact pairingClosedChainMonotone_of_nodup hΓ hlne hhead hforall hnodup
+    · rcases (List.exists_duplicate_iff_not_nodup.mpr hnodup) with ⟨a, ha⟩
+      rcases list_duplicate_split ha with ⟨s, t, u, rfl⟩
+      have hforall_outer :
+          List.Forall (fun p ↦ p ∈ Γ) (s ++ a :: u) := by
+        rw [List.forall_iff_forall_mem] at hforall ⊢
+        intro p hp
+        exact hforall p (by simp [List.mem_append] at hp ⊢; aesop)
+      have hforall_inner :
+          List.Forall (fun p ↦ p ∈ Γ) (a :: t) := by
+        rw [List.forall_iff_forall_mem] at hforall ⊢
+        intro p hp
+        exact hforall p (by simp [List.mem_append] at hp ⊢; aesop)
+      have houter_len : (s ++ a :: u).length < m := by
+        rw [← hlen]
+        simp
+      have hinner_len : (a :: t).length < m := by
+        rw [← hlen]
+        simp
+        omega
+      have houter_ne : s ++ a :: u ≠ [] := by simp
+      have hinner_ne : a :: t ≠ [] := by simp
+      have houter_head : (s ++ a :: u).head? = some base := by
+        cases s <;> simpa using hhead
+      have hinner_head : (a :: t).head? = some a := by simp
+      have houter :
+          rockafellarChainValue (s ++ a :: u) base.1 ≤ 0 :=
+        ih (s ++ a :: u).length houter_len rfl houter_ne houter_head hforall_outer
+      have hinner :
+          rockafellarChainValue (a :: t) a.1 ≤ 0 :=
+        ih (a :: t).length hinner_len rfl hinner_ne hinner_head hforall_inner
+      rw [rockafellarChainValue_duplicate_split]
+      linarith
+
+/-- Pairing cyclical monotonicity on finite injective cycles implies the list-based closed-chain
+property used by the Rockafellar construction. -/
+lemma pairingClosedChainMonotone_of_cCyclicallyMonotone_negInner
+    {Γ : Set (E × E)}
+    (hΓ : CCyclicallyMonotone (fun x y ↦ -inner ℝ x y) Γ) :
+    PairingClosedChainMonotone Γ := by
+  intro l base hlne hhead hforall
+  exact pairingClosedChainMonotone_of_cCyclicallyMonotone_negInner_aux hΓ l.length rfl hlne hhead
+    hforall
 
 /-- Under the closed-chain nonpositivity hypothesis, every rooted value set is bounded above by the
 affine functional `x ↦ ⟪y, x - base.1⟫` for each `(x, y) ∈ Γ`. -/
@@ -441,9 +757,9 @@ lemma properRockafellarPotential_lt_top_of_pairingClosedChainMonotone
       exact WithTop.coe_le_coe.mpr (h_bound r hr)
   exact lt_of_le_of_lt hupper (WithTop.coe_lt_top _)
 
-/-- If the extended-real Rockafellar potential is finite at `x`, then the real value set at `x`
-is automatically bounded above by that finite value. This is the local replacement for the old
-global `h_bdd` hypothesis. -/
+/-- If the proper Rockafellar potential is finite at `x`, then the real value set at `x` is
+bounded above by that finite value. This replaces the global boundedness hypothesis with a local
+one. -/
 lemma bddAbove_rockafellarValueSet_of_properRockafellarPotential_lt_top
     {base : E × E} {Γ : Set (E × E)} {x : E}
     (hfin : properRockafellarPotential base Γ x < ⊤) :
@@ -496,11 +812,8 @@ lemma coe_csSup_eq_sSup_image_withTop {s : Set ℝ} (hs : s.Nonempty) (hb : BddA
     simpa [WithTop.coe_untop _ (WithTop.lt_top_iff_ne_top.mp hfin)] using hthis
   exact le_antisymm hcoe_le hupper
 
-/-- Under the old bounded-above hypothesis, the proper Rockafellar potential is finite everywhere.
-
-This is the point where the new `WithTop ℝ` construction reconnects with the old real-valued one:
-if the rooted value set at each point is bounded above, then the extended supremum never reaches
-`⊤`. -/
+/-- If the rooted value sets are bounded above, then the proper Rockafellar potential is finite
+everywhere. This connects the `WithTop ℝ` construction back to the classical real-valued one. -/
 lemma properRockafellarPotential_lt_top_of_bddAbove
     {base : E × E} {Γ : Set (E × E)}
     {h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)}
@@ -511,7 +824,7 @@ lemma properRockafellarPotential_lt_top_of_bddAbove
     (rockafellarValueSet_nonempty hbase x) (h_bdd x)]
   exact WithTop.coe_lt_top _
 
-/-- In the bounded-above regime, the proper Rockafellar potential is just the old real-valued
+/-- In the bounded-above regime, the proper Rockafellar potential equals the classical real-valued
 Rockafellar potential viewed inside `WithTop ℝ`. -/
 lemma properRockafellarPotential_eq_coe_rockafellarPotential
     {base : E × E} {Γ : Set (E × E)}
@@ -523,8 +836,8 @@ lemma properRockafellarPotential_eq_coe_rockafellarPotential
   exact (coe_csSup_eq_sSup_image_withTop
     (rockafellarValueSet_nonempty hbase x) (h_bdd x)).symm
 
-/-- Therefore the old real-valued Rockafellar potential is exactly the real wrapper of the new
-proper potential, provided the rooted value sets are bounded above. -/
+/-- The real-valued Rockafellar potential equals the real wrapper of the proper potential when
+the rooted value sets are bounded above. -/
 lemma toRealPotential_properRockafellarPotential_eq_rockafellarPotential
     {base : E × E} {Γ : Set (E × E)}
     {h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)}
@@ -723,14 +1036,13 @@ lemma properSubgradient_properRockafellarPotential_of_mem_of_lt_top
     rw [hmap]
     exact hsup_translate
 
-/-- Under the closed-chain nonpositivity hypothesis, the support set `Γ` is contained in the
-proper subgradient graph of the proper Rockafellar potential.
+/-- Under the closed-chain hypothesis, the support set `Γ` is contained in the proper subgradient
+graph of the proper Rockafellar potential.
 
-This is the proper extended-real Rockafellar containment theorem in the migrated API. The only
-nonformal input is the pointwise finiteness result from
-`properRockafellarPotential_lt_top_of_pairingClosedChainMonotone`; once that is available, the
-subgradient inequality itself is exactly the same append-a-point argument as in the bounded
-real-valued construction. -/
+The subgradient inequality itself is the standard append-a-point argument: every rooted chain
+value at `x` can be extended by `(x, y)`, giving a larger chain value at `z`. The only additional
+input in the extended-real setting is local finiteness at the contact point, which follows from
+the pairing closed-chain condition. -/
 lemma subset_ProperSubgradientGraph_properRockafellarPotential_of_pairingClosedChainMonotone
     {base : E × E} {Γ : Set (E × E)}
     (hΓ : PairingClosedChainMonotone Γ) (hbase : base ∈ Γ) :
@@ -739,11 +1051,11 @@ lemma subset_ProperSubgradientGraph_properRockafellarPotential_of_pairingClosedC
   exact properSubgradient_properRockafellarPotential_of_mem_of_lt_top hbase hp
     (properRockafellarPotential_lt_top_of_pairingClosedChainMonotone hΓ hbase hp)
 
-/-- Every point of `Γ` is a subgradient of the rooted Rockafellar potential.
+/-- Every point of `Γ` is a subgradient of the real-valued Rockafellar potential rooted at `base`.
 
-The point is simple: every rooted chain value at `x` can be extended by appending `(x, y)`, so its
-value increases by exactly `⟪y, z - x⟫` when evaluated at `z`. Taking the supremum over all rooted
-chains at `x` yields the global subgradient inequality. -/
+Each rooted chain value at `x` can be extended by appending `(x, y)`, which adds exactly
+`⟪y, z - x⟫` when evaluated at `z`. Taking the supremum over all rooted chains yields the global
+subgradient inequality. -/
 lemma subgradient_rockafellarPotential_of_mem
     {base : E × E} {Γ : Set (E × E)}
     {h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)}
@@ -765,10 +1077,9 @@ lemma subgradient_rockafellarPotential_of_mem
     linarith
   linarith
 
-/-- The rooted Rockafellar potential contains `Γ` in its subgradient graph. This is the
-real-valued Rockafellar containment theorem in the present file: once the rooted value sets are
-known to be bounded above, the supremum construction produces a genuine real-valued convex
-potential whose subgradient graph contains the original set. -/
+/-- The rooted Rockafellar potential contains `Γ` in its subgradient graph. This is the classical
+Rockafellar containment theorem: once the rooted value sets are bounded above, the supremum
+construction produces a real-valued convex potential whose subgradient graph contains `Γ`. -/
 lemma subset_SubgradientGraph_rockafellarPotential
     {base : E × E} {Γ : Set (E × E)}
     {h_bdd : ∀ x : E, BddAbove (rockafellarValueSet base Γ x)}

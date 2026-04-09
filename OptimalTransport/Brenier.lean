@@ -9,25 +9,28 @@ namespace OptimalTransport
 open MeasureTheory
 
 /-!
-This file collects the measure-theoretic lemmas on the map side of the Brenier program that fit
-cleanly into the current repository API.
+This file develops the measure-theoretic bridge from subgradient inclusion to Monge-map
+representation, culminating in Brenier's theorem for quadratic cost.
 
-The two main reusable facts proved here are:
+The key ingredients are:
 
-* support inclusion in the graph of a map implies almost-sure graph membership;
-* a transport plan whose first marginal is `μ` and which is almost surely concentrated on the graph
-  of a measurable map `T` is exactly the graph plan `graph μ T`.
+1. **Graph concentration.** If the support of a transport plan is contained in the graph of a
+   measurable map, then the plan is almost surely concentrated on that graph, and hence equals the
+   graph plan of that map. This is the abstract uniqueness lemma: once a plan is known to be
+   supported on a graph, its first marginal uniquely determines it.
 
-The final section adds the actual Milestone 6 bridge used later in Brenier's theorem:
+2. **Proper-subgradient graph collapse.** If a transport plan is supported in the proper
+   subgradient graph of a convex potential `Φ : E → WithTop ℝ`, and its first marginal is
+   absolutely continuous with respect to an additive Haar measure, then the plan is the graph
+   plan of the gradient of the real-valued representative `x ↦ (Φ x).untopD 0`. The proof
+   restricts to the interior of the effective domain (a convex set whose frontier has Haar
+   measure zero), where the real-valued representative is differentiable a.e., so subgradients
+   coincide with gradients.
 
-* if a transport plan is supported in the subgradient graph of a convex potential `φ`;
-* and if its first marginal is absolutely continuous with respect to an additive Haar measure;
-
-then the plan is the graph plan of the measurable map `gradient φ`.
-
-The second statement is the key measure-theoretic uniqueness lemma needed later in Brenier's
-argument: once one has proved that an optimal plan is a.e. supported on a graph, no further
-transport structure remains to be checked.
+3. **Brenier's theorem.** Combining the above with the Rockafellar construction (optimal plans
+   sit inside proper subgradient graphs) yields the final result: an optimal quadratic-cost
+   coupling with absolutely continuous source measure is the graph plan of the gradient of a
+   proper convex potential, and the target measure is the pushforward by that gradient map.
 -/
 
 section GraphAE
@@ -143,9 +146,8 @@ namespace TransportPlan
 /-- If the support of a transport plan is contained in a proper subgradient graph, then the
 projection of that support to the source space lies in the effective domain of the potential.
 
-This is the basic finiteness statement behind the proper-convex Brenier refactor: proper
-subgradients already include finiteness at the contact point, so source-side finiteness on the
-support is immediate once support inclusion is known. -/
+Since proper subgradients include finiteness at the contact point, source-side finiteness on the
+support follows immediately from support inclusion. -/
 lemma fst_image_support_subset_effectiveDomain_of_support_subset_properSubgradientGraph
     {π : TransportPlan E E} {Φ : E → WithTop ℝ}
     (hsupp : (π : Measure (E × E)).support ⊆ ProperSubgradientGraph Φ) :
@@ -164,10 +166,9 @@ lemma ae_mem_effectiveDomain_fst_of_support_subset_properSubgradientGraph
   filter_upwards [(π : Measure (E × E)).support_mem_ae] with z hz
   exact (hsupp hz).1
 
-/-- If `Φ` is measurable, the previous statement pushes forward to the first marginal.
-
-This is the Brenier-side replacement for the old global `HasRockafellarBound` hypothesis: what is
-really needed is finiteness on the source measure, not finiteness everywhere. -/
+/-- If `Φ` is measurable, the effective-domain a.e. membership pushes forward to the first
+marginal. The absolute-continuity hypothesis ensures that Haar-null sets for `m` are null for
+the first marginal. -/
 lemma fst_ae_mem_effectiveDomain_of_support_subset_properSubgradientGraph
     [PolishSpace E]
     {π : TransportPlan E E} {Φ : E → WithTop ℝ} (hΦ : Measurable Φ)
@@ -213,18 +214,15 @@ variable {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E]
 
 namespace TransportPlan
 
-/-- If a transport plan is supported in the subgradient graph of a convex function `φ`, and its
+/-- If a transport plan is supported in the subgradient graph of a convex function `φ` and its
 first marginal is absolutely continuous with respect to an additive Haar measure `m`, then the plan
-is almost surely supported on the graph of the gradient of `φ`.
+is almost surely supported on the graph of `gradient φ`.
 
-The proof has two inputs:
-
-1. convexity gives `HasGradientAt φ (gradient φ x) x` for `m`-almost every `x`, hence also for the
-   first marginal by absolute continuity;
-2. on points of the support lying in the subgradient graph, the subgradient must equal the gradient
-   at differentiability points.
-
-This is the precise analytic bridge from Rockafellar's convex potential to a Monge map. -/
+The proof has two steps:
+1. Convexity gives `HasGradientAt φ (gradient φ x) x` for `m`-almost every `x`, hence for the
+   first marginal by absolute continuity.
+2. At a support point in the subgradient graph where `φ` is differentiable, the subgradient
+   must coincide with the gradient. -/
 lemma ae_mem_graphOn_gradient_of_support_subset_subgradientGraph
     {π : TransportPlan E E} {φ : E → ℝ} (hconv : ConvexOn ℝ Set.univ φ)
     (hfst_ac : (π.fst : Measure E) ≪ m)
@@ -248,13 +246,9 @@ lemma ae_mem_graphOn_gradient_of_support_subset_subgradientGraph
     simpa using (Subgradient.eq_gradient_of_hasGradientAt (by simpa using hzsub) hzgrad).symm
   simp [hz_eq]
 
-/-- A transport plan supported in the subgradient graph of a convex potential is the graph plan of
-the gradient of that potential, provided the first marginal is absolutely continuous with respect to
-an additive Haar measure.
-
-This packages the previous almost-sure graph-membership statement with the general
-`eq_graph_of_ae_mem_graphOn` lemma. It is the exact Milestone 6 statement needed later when an
-optimal plan has already been identified with a convex subgradient graph via Rockafellar. -/
+/-- A transport plan supported in the subgradient graph of a convex potential equals the graph plan
+of the gradient of that potential, provided the first marginal is absolutely continuous with respect
+to an additive Haar measure. -/
 lemma eq_graph_gradient_of_support_subset_subgradientGraph
     {π : TransportPlan E E} {φ : E → ℝ} (hconv : ConvexOn ℝ Set.univ φ)
     (hfst_ac : (π.fst : Measure E) ≪ m)
@@ -286,8 +280,7 @@ lemma toTransportPlan_eq_graph_gradient_of_support_subset_subgradientGraph
       (π := π.toTransportPlan) (φ := φ) hconv hfst_ac hsupp
 
 /-- Under the same hypotheses, the target marginal is the pushforward of the source marginal by the
-gradient map. This is the pushforward identity needed for the Monge-side conclusion of Brenier's
-theorem. -/
+gradient map. -/
 lemma snd_eq_map_gradient_of_support_subset_subgradientGraph
     {μ ν : ProbabilityMeasure E} (π : Coupling μ ν) {φ : E → ℝ}
     (hconv : ConvexOn ℝ Set.univ φ) (hμ_ac : (μ : Measure E) ≪ m)
@@ -313,15 +306,15 @@ variable {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E]
 
 namespace TransportPlan
 
-/-- Proper-convex graph collapse without any global finiteness assumption.
+/-- Proper-convex graph collapse: if a transport plan is supported in the proper subgradient
+graph of a measurable proper convex potential, and the first marginal is absolutely continuous
+with respect to an additive Haar measure, then the plan is almost surely supported on the graph
+of the gradient of the real-valued representative `x ↦ (Φ x).untopD 0`.
 
-The point is that only source-side finiteness matters. Support inclusion in a proper subgradient
-graph gives finiteness on the first coordinate almost everywhere; since the effective domain of a
-proper convex function is convex, its frontier has Haar measure zero, so almost every such source
-point actually lies in the interior of the effective domain. On that open convex region the
-real-valued representative `x ↦ (Φ x).untopD 0` is convex and differentiable almost everywhere, and
-the localized supporting-hyperplane inequality forces the support point to lie on the gradient
-graph. -/
+The proof restricts to the interior of the effective domain. The frontier of a convex set has Haar
+measure zero, so almost every source point lies in the interior. There the real-valued
+representative is differentiable a.e. by convexity, and the local subgradient inequality forces
+the support point to lie on the gradient graph. -/
 lemma ae_mem_graphOn_gradient_of_support_subset_properSubgradientGraph
     {π : TransportPlan E E} {Φ : E → WithTop ℝ} (hproper : IsProperConvex Φ)
     (hΦ : Measurable Φ) (hfst_ac : (π.fst : Measure E) ≪ m)
@@ -380,12 +373,10 @@ lemma ae_mem_graphOn_gradient_of_support_subset_properSubgradientGraph
       (SubgradientOn.eq_gradient_of_hasGradientAt_of_mem_interior hsubOn hzint hzgrad).symm
   simp [φ, hz_eq]
 
-/-- Proper-convex version of the gradient-graph bridge, under the temporary compatibility
-assumption that the proper potential is finite everywhere.
+/-- Transport plan supported in a proper subgradient graph equals the graph plan of the gradient of
+the real-valued representative, under absolute continuity of the first marginal.
 
-This theorem is the migrated endpoint for the Milestone 6 bridge: once a proper convex potential
-`Φ : E → WithTop ℝ` is known to be finite everywhere, we pass to the real-valued wrapper
-`toRealPotential Φ hfin` and reuse the existing real-valued graph-collapse theorem. -/
+This combines the a.e. graph-membership statement with the general `eq_graph_of_ae_mem_graphOn`. -/
 lemma eq_graph_gradient_of_support_subset_properSubgradientGraph_of_finite
     {π : TransportPlan E E} {Φ : E → WithTop ℝ} (hproper : IsProperConvex Φ)
     (hfin : ∀ x : E, Φ x < ⊤) (hfst_ac : (π.fst : Measure E) ≪ m)
@@ -401,8 +392,11 @@ lemma eq_graph_gradient_of_support_subset_properSubgradientGraph_of_finite
   exact eq_graph_gradient_of_support_subset_subgradientGraph
     (π := π) (φ := toRealPotential Φ hfin) hconv hfst_ac hsupp'
 
-/-- Proper-convex graph collapse to an actual transport map, without a global finiteness
-assumption. -/
+/-- Transport plan supported in a proper subgradient graph equals the graph plan of the gradient of
+the real-valued representative, without any global finiteness assumption.
+
+The induced Monge map is the gradient of `x ↦ (Φ x).untopD 0`, which is only used on the
+effective domain — a set of full source measure under the given hypotheses. -/
 lemma eq_graph_gradient_of_support_subset_properSubgradientGraph
     {π : TransportPlan E E} {Φ : E → WithTop ℝ} (hproper : IsProperConvex Φ)
     (hΦ : Measurable Φ) (hfst_ac : (π.fst : Measure E) ≪ m)
@@ -419,8 +413,8 @@ end TransportPlan
 
 namespace Coupling
 
-/-- Coupling version of the proper-convex graph-collapse theorem under the temporary
-finite-everywhere compatibility assumption. -/
+/-- Coupling version of the proper-convex graph-collapse theorem for potentials that are finite
+everywhere. -/
 lemma toTransportPlan_eq_graph_gradient_of_support_subset_properSubgradientGraph_of_finite
     {μ ν : ProbabilityMeasure E} (π : Coupling μ ν) {Φ : E → WithTop ℝ}
     (hproper : IsProperConvex Φ) (hfin : ∀ x : E, Φ x < ⊤)
@@ -435,8 +429,7 @@ lemma toTransportPlan_eq_graph_gradient_of_support_subset_properSubgradientGraph
     TransportPlan.eq_graph_gradient_of_support_subset_properSubgradientGraph_of_finite
       (π := π.toTransportPlan) (Φ := Φ) hproper hfin hfst_ac hsupp
 
-/-- Coupling version of the proper-convex graph-collapse theorem without a global finiteness
-assumption. -/
+/-- Coupling version of the proper-convex graph-collapse theorem, without global finiteness. -/
 lemma toTransportPlan_eq_graph_gradient_of_support_subset_properSubgradientGraph
     {μ ν : ProbabilityMeasure E} (π : Coupling μ ν) {Φ : E → WithTop ℝ}
     (hproper : IsProperConvex Φ) (hΦ : Measurable Φ)
@@ -451,7 +444,8 @@ lemma toTransportPlan_eq_graph_gradient_of_support_subset_properSubgradientGraph
     TransportPlan.eq_graph_gradient_of_support_subset_properSubgradientGraph
       (π := π.toTransportPlan) (Φ := Φ) hproper hΦ hfst_ac hsupp
 
-/-- Pushforward identity corresponding to the proper-convex graph-collapse theorem. -/
+/-- Pushforward identity: under the same hypotheses, the target marginal equals the pushforward of
+the source marginal by the gradient of the real-valued representative. -/
 lemma snd_eq_map_gradient_of_support_subset_properSubgradientGraph_of_finite
     {μ ν : ProbabilityMeasure E} (π : Coupling μ ν) {Φ : E → WithTop ℝ}
     (hproper : IsProperConvex Φ) (hfin : ∀ x : E, Φ x < ⊤)
@@ -467,7 +461,7 @@ lemma snd_eq_map_gradient_of_support_subset_properSubgradientGraph_of_finite
   have hsnd := congrArg TransportPlan.snd hgraph
   simpa [π.snd_eq, TransportPlan.snd_graph] using hsnd
 
-/-- Pushforward identity corresponding to the localized proper-convex graph-collapse theorem. -/
+/-- Pushforward identity for the localized proper-convex graph collapse. -/
 lemma snd_eq_map_gradient_of_support_subset_properSubgradientGraph
     {μ ν : ProbabilityMeasure E} (π : Coupling μ ν) {Φ : E → WithTop ℝ}
     (hproper : IsProperConvex Φ) (hΦ : Measurable Φ)
@@ -483,8 +477,9 @@ lemma snd_eq_map_gradient_of_support_subset_properSubgradientGraph
   have hsnd := congrArg TransportPlan.snd hgraph
   simpa [π.snd_eq, TransportPlan.snd_graph] using hsnd
 
-/-- Migrated proper-convex Brenier endpoint under the current compatibility assumption that the
-proper potential is finite everywhere. -/
+/-- Proper-convex Brenier endpoint: if a coupling is supported in the proper subgradient graph of a
+finite-everywhere proper convex potential, then the plan is the graph plan of the gradient and the
+target marginal is the corresponding pushforward. -/
 theorem exists_convex_potential_eq_graph_of_support_subset_properSubgradientGraph_of_finite
     {μ ν : ProbabilityMeasure E} (π : Coupling μ ν) {Φ : E → WithTop ℝ}
     (hproper : IsProperConvex Φ) (hfin : ∀ x : E, Φ x < ⊤)
@@ -502,11 +497,11 @@ theorem exists_convex_potential_eq_graph_of_support_subset_properSubgradientGrap
   · exact snd_eq_map_gradient_of_support_subset_properSubgradientGraph_of_finite
       (π := π) (Φ := Φ) hproper hfin hμ_ac hsupp
 
-/-- Migrated proper-convex endpoint without any global finiteness assumption.
+/-- Proper-convex Brenier endpoint without any global finiteness assumption.
 
-The output is phrased directly in terms of the proper potential `Φ`; the induced Monge map is the
-gradient of the real-valued representative `x ↦ (Φ x).untopD 0`, which is only used on the
-effective domain, a set of full source measure under the hypotheses. -/
+The plan is the graph plan of `gradient (fun x => (Φ x).untopD 0)`, and the target marginal is the
+pushforward of the source marginal by this gradient map. The real-valued representative is only used
+on the effective domain, a set of full source measure. -/
 theorem exists_properConvex_potential_eq_graph_of_support_subset_properSubgradientGraph
     {μ ν : ProbabilityMeasure E} (π : Coupling μ ν) {Φ : E → WithTop ℝ}
     (hproper : IsProperConvex Φ) (hΦ : Measurable Φ)
@@ -522,7 +517,7 @@ theorem exists_properConvex_potential_eq_graph_of_support_subset_properSubgradie
   · exact snd_eq_map_gradient_of_support_subset_properSubgradientGraph
       (π := π) (Φ := Φ) hproper hΦ hμ_ac hsupp
 
-/-- Quadratic-cost packaging of the migrated proper-convex endpoint. -/
+/-- Quadratic-cost Brenier theorem with proper convex potential and optimality. -/
 theorem
     exists_convex_potential_of_optimal_quadratic_of_support_subset_properSubgradientGraph_of_finite
     {μ ν : ProbabilityMeasure E} (π : Coupling μ ν) {Φ : E → WithTop ℝ} {κ : ℝ}
@@ -561,114 +556,149 @@ namespace Coupling
 
 variable {μ ν : ProbabilityMeasure E}
 
-/-- The Rockafellar boundedness hypothesis for a coupling.
+/-- The classical Brenier theorem for quadratic cost on a finite-dimensional inner product space,
+without the Rockafellar boundedness assumption.
 
-This records exactly the extra assumption still needed by the present real-valued Rockafellar file:
-some base point of the support should root value sets that are bounded above at every target point.
-Under this hypothesis the finite-chain supremum defines a genuine real-valued convex potential. -/
-def HasRockafellarBound (π : Coupling μ ν) : Prop :=
-  ∃ base ∈ ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support,
-    ∀ x : E,
-      BddAbove
-        (rockafellarValueSet base
-          (((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support) x)
+Given an optimal transport plan for the quadratic cost with absolutely continuous source measure,
+the plan is determined by the gradient of a proper convex potential `Φ`:
+1. `Φ` is proper convex and measurable;
+2. The plan equals the graph plan of `gradient (fun x => (Φ x).untopD 0)`;
+3. The target measure equals the pushforward of the source measure by this gradient;
+4. The plan's support is contained in the proper subgradient graph of `Φ`.
 
-/-- If a coupling satisfies the Rockafellar boundedness hypothesis and its source marginal is
-absolutely continuous with respect to an additive Haar measure, then the coupling is induced by the
-gradient of a convex potential.
-
-The potential is the rooted Rockafellar supremum attached to the support of the coupling.
-The proof combines the completed Rockafellar containment theorem with the Milestone 6
-graph-collapse result. -/
-theorem exists_convex_potential_eq_graph_of_hasRockafellarBound
-    (π : Coupling μ ν) (hμ_ac : (μ : Measure E) ≪ m) (hrock : π.HasRockafellarBound) :
-    ∃ φ : E → ℝ,
-      ConvexOn ℝ Set.univ φ ∧
-      π.toTransportPlan = TransportPlan.graph μ (gradient φ) (measurable_gradient φ) ∧
-      ν = μ.map (measurable_gradient φ).aemeasurable := by
-  rcases hrock with ⟨base, hbase, h_bdd⟩
-  let Γ : Set (E × E) := ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support
-  let Φ : E → WithTop ℝ := properRockafellarPotential base Γ
-  have hfin : ∀ x : E, Φ x < ⊤ := by
-    intro x
-    simpa [Φ, Γ] using
-      properRockafellarPotential_lt_top_of_bddAbove
-        (base := base) (Γ := Γ) (h_bdd := h_bdd) hbase x
-  have hproper : IsProperConvex Φ := by
-    exact isProperConvex_properRockafellarPotential
-      (base := base) (Γ := Γ) (hbase := hbase) (x := base.1) (hfin base.1)
-  have hsupp : ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support ⊆
-      ProperSubgradientGraph Φ := by
-    have hsupp_real : ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support ⊆
-        SubgradientGraph (rockafellarPotential base Γ h_bdd) := by
-      simpa [Γ] using
-        subset_SubgradientGraph_rockafellarPotential
-          (base := base) (Γ := Γ) (h_bdd := h_bdd) hbase
-    have hgraph_eq :
-        ProperSubgradientGraph Φ =
-          SubgradientGraph (rockafellarPotential base Γ h_bdd) := by
-      rw [properSubgradientGraph_eq_subgradientGraph_toRealPotential (Φ := Φ) hfin,
-        toRealPotential_properRockafellarPotential_eq_rockafellarPotential
-          (base := base) (Γ := Γ) (h_bdd := h_bdd) hbase]
-    intro z hz
-    rw [hgraph_eq]
-    exact hsupp_real hz
-  exact exists_convex_potential_eq_graph_of_support_subset_properSubgradientGraph_of_finite
-    (π := π) (Φ := Φ) hproper hfin hμ_ac hsupp
-
-/-- Final quadratic-cost packaging under the hypotheses currently available in the repository.
-
-If `π` is already known to be optimal for the quadratic cost and also satisfies the Rockafellar
-boundedness hypothesis on its support, then there exists a convex potential `φ` whose gradient
-induces `π`. Since the graph plan is literally the same transport plan, it inherits optimality
-immediately.
-
-Relative to the classical Brenier theorem, the only missing input here is the derivation of the
-Rockafellar support hypothesis from optimality itself. -/
-theorem exists_convex_potential_of_optimal_quadratic_of_hasRockafellarBound
-    (π : Coupling μ ν) {κ : ℝ}
+The proof chains together: optimality implies pairing cyclical monotonicity of the support,
+which implies the closed-chain condition, which by Rockafellar gives inclusion in the proper
+subgradient graph, and the proper-convex graph collapse then produces the Monge map. -/
+theorem exists_properConvex_potential_of_optimal_quadratic
+    (π : Coupling μ ν) {κ : ℝ} (hκ : 0 < κ)
     (hopt : ∀ ρ : Coupling μ ν,
       transportCost (quadraticCost κ) π.toTransportPlan ≤
         transportCost (quadraticCost κ) ρ.toTransportPlan)
-    (hμ_ac : (μ : Measure E) ≪ m) (hrock : π.HasRockafellarBound) :
-    ∃ φ : E → ℝ,
-      ConvexOn ℝ Set.univ φ ∧
-      π.toTransportPlan = TransportPlan.graph μ (gradient φ) (measurable_gradient φ) ∧
-      ν = μ.map (measurable_gradient φ).aemeasurable ∧
-      ∀ ρ : Coupling μ ν,
-        transportCost (quadraticCost κ)
-            (TransportPlan.graph μ (gradient φ) (measurable_gradient φ)) ≤
-          transportCost (quadraticCost κ) ρ.toTransportPlan := by
-  rcases hrock with ⟨base, hbase, h_bdd⟩
-  let Γ : Set (E × E) := ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support
-  let Φ : E → WithTop ℝ := properRockafellarPotential base Γ
-  have hfin : ∀ x : E, Φ x < ⊤ := by
-    intro x
-    simpa [Φ, Γ] using
-      properRockafellarPotential_lt_top_of_bddAbove
-        (base := base) (Γ := Γ) (h_bdd := h_bdd) hbase x
+    (hπ : Integrable (fun z : E × E ↦ quadraticCost κ z.1 z.2)
+      (π.toTransportPlan : Measure (E × E)))
+    (hμ_ac : (μ : Measure E) ≪ m) :
+    ∃ Φ : E → WithTop ℝ,
+      IsProperConvex Φ ∧
+      Measurable Φ ∧
+      π.toTransportPlan =
+        TransportPlan.graph μ (gradient fun x => (Φ x).untopD 0)
+          (measurable_gradient fun x => (Φ x).untopD 0) ∧
+      ν = μ.map (measurable_gradient fun x => (Φ x).untopD 0).aemeasurable ∧
+      ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support ⊆
+        ProperSubgradientGraph Φ := by
+  let Γ := ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support
+  have hpairing : PairingClosedChainMonotone Γ := by
+    have hΓ : CCyclicallyMonotone (fun x y ↦ -inner ℝ x y) Γ := by
+      intro n p hp hmem
+      have h := pairing_support_of_optimal_quadratic hκ π hopt hπ n p hp hmem
+      have h1 : (∑ i, -inner ℝ (p i).1 (p i).2) = -(∑ i, inner ℝ (p i).1 (p i).2) := by simp
+      have h2 :
+          (∑ i, -inner ℝ (p i).1 (p (i + 1)).2) =
+            -(∑ i, inner ℝ (p i).1 (p (i + 1)).2) := by
+        simp
+      rw [h1, h2]
+      exact neg_le_neg h
+    exact pairingClosedChainMonotone_of_cCyclicallyMonotone_negInner hΓ
+  have hplan_ne_zero : ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)) ≠ 0 := by
+    intro hzero
+    have huniv :
+        (((π.toTransportPlan : TransportPlan E E) : Measure (E × E)) Set.univ) =
+          (1 : ENNReal) := by simp
+    have : (0 : ENNReal) = 1 := by
+      simp [hzero] at huniv
+    exact zero_ne_one this
+  have hΓ_nonempty : Γ.Nonempty := by
+    simpa [Γ] using
+      (Measure.nonempty_support
+        (μ := ((π.toTransportPlan : TransportPlan E E) : Measure (E × E))) hplan_ne_zero)
+  rcases hΓ_nonempty with ⟨base, hbase⟩
+  let Φ := properRockafellarPotential base Γ
+  have hΦ : Measurable Φ := measurable_properRockafellarPotential hbase
+  have hfin_base : Φ base.1 < ⊤ := by
+    refine properRockafellarPotential_lt_top_of_pairingClosedChainMonotone hpairing hbase
+      (x := base.1) (y := base.2) hbase
+  have hbase_in_domain : base.1 ∈ EffectiveDomain Φ := by
+    simp [EffectiveDomain, hfin_base]
   have hproper : IsProperConvex Φ := by
-    exact isProperConvex_properRockafellarPotential
-      (base := base) (Γ := Γ) (hbase := hbase) (x := base.1) (hfin base.1)
-  have hsupp : ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support ⊆
-      ProperSubgradientGraph Φ := by
-    have hsupp_real : ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support ⊆
-        SubgradientGraph (rockafellarPotential base Γ h_bdd) := by
-      simpa [Γ] using
-        subset_SubgradientGraph_rockafellarPotential
-          (base := base) (Γ := Γ) (h_bdd := h_bdd) hbase
-    have hgraph_eq :
-        ProperSubgradientGraph Φ =
-          SubgradientGraph (rockafellarPotential base Γ h_bdd) := by
-      rw [properSubgradientGraph_eq_subgradientGraph_toRealPotential (Φ := Φ) hfin,
-        toRealPotential_properRockafellarPotential_eq_rockafellarPotential
-          (base := base) (Γ := Γ) (h_bdd := h_bdd) hbase]
-    intro z hz
-    rw [hgraph_eq]
-    exact hsupp_real hz
-  exact
-    exists_convex_potential_of_optimal_quadratic_of_support_subset_properSubgradientGraph_of_finite
-      (π := π) (Φ := Φ) hopt hproper hfin hμ_ac hsupp
+    simpa [Φ] using isProperConvex_properRockafellarPotential hbase hbase_in_domain
+  have hsupp : Γ ⊆ ProperSubgradientGraph Φ := by
+    exact subset_ProperSubgradientGraph_properRockafellarPotential_of_pairingClosedChainMonotone
+      hpairing hbase
+  refine ⟨Φ, hproper, hΦ, ?_⟩
+  have hplan :=
+    Coupling.exists_properConvex_potential_eq_graph_of_support_subset_properSubgradientGraph
+      (π := π) (Φ := Φ) hproper hΦ hμ_ac hsupp
+  exact ⟨hplan.1, hplan.2, hsupp⟩
+
+/-- Packaged Brenier endpoint from measure data only: finite second moments and absolute
+continuity of the source produce an optimal quadratic coupling and a proper convex potential whose
+gradient induces that optimal coupling. -/
+theorem exists_optimalCoupling_and_properConvex_potential_of_quadratic_data
+    (μ ν : ProbabilityMeasure E) {κ : ℝ} (hκ : 0 < κ)
+    (hμ2 : HasFiniteSecondMoment μ) (hν2 : HasFiniteSecondMoment ν)
+    (hμ_ac : (μ : Measure E) ≪ m) :
+    ∃ π : Coupling μ ν, ∃ Φ : E → WithTop ℝ,
+      IsProperConvex Φ ∧
+      Measurable Φ ∧
+      π.toTransportPlan =
+        TransportPlan.graph μ (gradient fun x => (Φ x).untopD 0)
+          (measurable_gradient fun x => (Φ x).untopD 0) ∧
+      ν = μ.map (measurable_gradient fun x => (Φ x).untopD 0).aemeasurable ∧
+      ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support ⊆
+        ProperSubgradientGraph Φ ∧
+      (∀ ρ : Coupling μ ν,
+        transportCost (quadraticCost κ) π.toTransportPlan ≤
+          transportCost (quadraticCost κ) ρ.toTransportPlan) := by
+  let cENN : E → E → ENNReal := fun x y ↦ ENNReal.ofReal (quadraticCost κ x y)
+  have hc_cont : IsContinuousCost cENN := by
+    dsimp [IsContinuousCost, cENN, quadraticCost]
+    exact ENNReal.continuous_ofReal.comp
+      (continuous_const.mul ((continuous_fst.sub continuous_snd).norm.pow 2))
+  have hc_lsc : IsLowerSemicontinuousCost cENN :=
+    isLowerSemicontinuousCost_of_isContinuousCost hc_cont
+  obtain ⟨π, hoptENN⟩ :=
+    exists_optimalCoupling_of_isLowerSemicontinuousCost (X := E) (Y := E) μ ν hc_lsc
+  have hπ_int :
+      Integrable (fun z : E × E ↦ quadraticCost κ z.1 z.2)
+        (π.toTransportPlan : Measure (E × E)) :=
+    integrable_quadraticCostIntegrand_of_hasFiniteSecondMoment
+      (π := π) hμ2 hν2 (le_of_lt hκ)
+  have hπ_nonneg :
+      0 ≤ᵐ[(π.toTransportPlan : Measure (E × E))] (fun z : E × E ↦ quadraticCost κ z.1 z.2) :=
+    Filter.Eventually.of_forall (fun z ↦ mul_nonneg (le_of_lt hκ) (sq_nonneg ‖z.1 - z.2‖))
+  have hopt : ∀ ρ : Coupling μ ν,
+      transportCost (quadraticCost κ) π.toTransportPlan ≤
+        transportCost (quadraticCost κ) ρ.toTransportPlan := by
+    intro ρ
+    have hρ_int :
+        Integrable (fun z : E × E ↦ quadraticCost κ z.1 z.2)
+          (ρ.toTransportPlan : Measure (E × E)) :=
+      integrable_quadraticCostIntegrand_of_hasFiniteSecondMoment
+        (π := ρ) hμ2 hν2 (le_of_lt hκ)
+    have hρ_nonneg :
+        0 ≤ᵐ[(ρ.toTransportPlan : Measure (E × E))] (fun z : E × E ↦ quadraticCost κ z.1 z.2) :=
+      Filter.Eventually.of_forall (fun z ↦ mul_nonneg (le_of_lt hκ) (sq_nonneg ‖z.1 - z.2‖))
+    have hπ_cost :
+        ENNReal.ofReal (transportCost (quadraticCost κ) π.toTransportPlan) =
+          transportCostENNReal cENN π.toTransportPlan := by
+      rw [transportCost, transportCostENNReal]
+      simp [cENN, ofReal_integral_eq_lintegral_ofReal hπ_int hπ_nonneg]
+    have hρ_cost :
+        ENNReal.ofReal (transportCost (quadraticCost κ) ρ.toTransportPlan) =
+          transportCostENNReal cENN ρ.toTransportPlan := by
+      rw [transportCost, transportCostENNReal]
+      simp [cENN, ofReal_integral_eq_lintegral_ofReal hρ_int hρ_nonneg]
+    have hleENN :
+        ENNReal.ofReal (transportCost (quadraticCost κ) π.toTransportPlan) ≤
+          ENNReal.ofReal (transportCost (quadraticCost κ) ρ.toTransportPlan) := by
+      simpa [hπ_cost, hρ_cost] using hoptENN ρ
+    have hρ_cost_nonneg : 0 ≤ transportCost (quadraticCost κ) ρ.toTransportPlan := by
+      exact integral_nonneg_of_ae hρ_nonneg
+    exact (ENNReal.ofReal_le_ofReal_iff hρ_cost_nonneg).1 hleENN
+  rcases exists_properConvex_potential_of_optimal_quadratic
+      (m := m) (π := π) hκ hopt hπ_int hμ_ac with
+    ⟨Φ, hproper, hΦ, hgraph, hpush, hsupp⟩
+  exact ⟨π, Φ, hproper, hΦ, hgraph, hpush, hsupp, hopt⟩
 
 end Coupling
 
@@ -681,31 +711,30 @@ namespace Coupling
 variable {n : ℕ}
 variable {μ ν : ProbabilityMeasure (EuclideanSpace ℝ (Fin n))}
 
-/-- Euclidean specialization of the quadratic Brenier endpoint currently formalized in the
-repository.
-
-This is the version closest to the planned grand theorem: on `EuclideanSpace ℝ (Fin n)`, an
-optimal quadratic coupling with absolutely continuous source measure and with the Rockafellar
-boundedness hypothesis on its support is induced by the gradient of a convex potential, and the
-resulting graph plan is optimal. -/
-theorem exists_convex_potential_of_optimal_quadratic_of_hasRockafellarBound_euclidean
+/-- Euclidean specialization of Brenier's theorem on `EuclideanSpace ℝ (Fin n)`. -/
+theorem exists_properConvex_potential_of_optimal_quadratic_euclidean
     (π : Coupling μ ν) {κ : ℝ}
     (hopt : ∀ ρ : Coupling μ ν,
       transportCost (quadraticCost κ) π.toTransportPlan ≤
         transportCost (quadraticCost κ) ρ.toTransportPlan)
+    (hκ : 0 < κ)
+    (hπ : Integrable (fun z : EuclideanSpace ℝ (Fin n) × EuclideanSpace ℝ (Fin n) ↦
+      quadraticCost κ z.1 z.2) (π.toTransportPlan : Measure (EuclideanSpace ℝ (Fin n) ×
+        EuclideanSpace ℝ (Fin n))))
     (hμ_ac : (μ : Measure (EuclideanSpace ℝ (Fin n))) ≪ volume)
-    (hrock : π.HasRockafellarBound) :
-    ∃ φ : EuclideanSpace ℝ (Fin n) → ℝ,
-      ConvexOn ℝ Set.univ φ ∧
+    :
+    ∃ Φ : EuclideanSpace ℝ (Fin n) → WithTop ℝ,
+      IsProperConvex Φ ∧
+      Measurable Φ ∧
       π.toTransportPlan =
-        TransportPlan.graph μ (gradient φ) (measurable_gradient φ) ∧
-      ν = μ.map (measurable_gradient φ).aemeasurable ∧
-      ∀ ρ : Coupling μ ν,
-        transportCost (quadraticCost κ)
-            (TransportPlan.graph μ (gradient φ) (measurable_gradient φ)) ≤
-          transportCost (quadraticCost κ) ρ.toTransportPlan := by
-  exact exists_convex_potential_of_optimal_quadratic_of_hasRockafellarBound
-    (m := volume) (π := π) hopt hμ_ac hrock
+        TransportPlan.graph μ (gradient fun x => (Φ x).untopD 0)
+          (measurable_gradient fun x => (Φ x).untopD 0) ∧
+      ν = μ.map (measurable_gradient fun x => (Φ x).untopD 0).aemeasurable ∧
+      ((π.toTransportPlan : TransportPlan (EuclideanSpace ℝ (Fin n))
+        (EuclideanSpace ℝ (Fin n))) : Measure ((EuclideanSpace ℝ (Fin n)) ×
+          (EuclideanSpace ℝ (Fin n)))).support ⊆ ProperSubgradientGraph Φ := by
+  exact exists_properConvex_potential_of_optimal_quadratic
+    (m := volume) (π := π) hκ hopt hπ hμ_ac
 
 end Coupling
 

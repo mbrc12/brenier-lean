@@ -6,28 +6,26 @@ import Mathlib.Order.ConditionallyCompleteLattice.Basic
 namespace OptimalTransport
 
 /-!
-This file starts the refactor from real-valued convex potentials to proper extended-real-valued
-potentials.
+This file introduces the extended-real-valued convex-analysis layer needed for the Rockafellar
+construction and the Brenier bridge.
 
-For now the layer is intentionally small. We only introduce the objects that later sit between the
-Rockafellar construction and the Brenier extraction step:
+The main objects are:
 
 * `EffectiveDomain Φ`: the finite locus `{x | Φ x < ⊤}` of a function `Φ : E → WithTop ℝ`;
 * `ProperSubgradient Φ x y`: the supporting-hyperplane inequality for an extended-real-valued
-  function, together with the finiteness of `Φ x`;
+  function, together with finiteness at the contact point `x`;
 * `ProperSubgradientGraph Φ`: the graph of that relation;
-* `IsProperConvex Φ`: a practical proper-convex predicate, phrased as convexity of the effective
-  domain together with convexity of the real-valued restriction `x ↦ (Φ x).untopD 0` on that
-  domain.
+* `SubgradientOn s φ x y`: a localized subgradient relation on a set `s`;
+* `IsProperConvex Φ`: a proper-convex predicate, stated as nonempty effective domain plus
+  convexity of the real-valued restriction `x ↦ (Φ x).untopD 0` on that domain.
 
-We also record the two algebraic manipulations that will be reused later:
+The algebraic manipulations on proper subgradients mirror those on ordinary subgradients:
 
 * affine perturbation by `z ↦ ⟪v, z⟫ + b`;
-* positive rescaling of finite values, keeping `⊤` fixed.
+* positive rescaling of finite values.
 
-The file deliberately stops before any Rockafellar-specific construction. The point is to put the
-extended-real API in place first, while staying compatible with the existing real-valued
-convex-analysis layer.
+These are exactly the operations needed when converting between pairing-style costs and
+convex potentials in the Brenier argument.
 -/
 
 open scoped BigOperators
@@ -58,8 +56,7 @@ def ProperSubgradientGraph (Φ : E → WithTop ℝ) : Set (E × E) :=
 
 /-- A localized real-valued subgradient relation on a set `s`.
 
-This is the right notion for the effective-domain phase of the Brenier refactor: once a proper
-convex potential `Φ` is known to be finite on `s`, the representative `x ↦ (Φ x).untopD 0`
+When a proper convex potential `Φ` is finite on `s`, the representative `x ↦ (Φ x).untopD 0`
 behaves like an ordinary convex function on `s`, and its supporting-hyperplane inequalities only
 need to be checked against points of `s`. -/
 def SubgradientOn (s : Set E) (φ : E → ℝ) (x y : E) : Prop :=
@@ -74,11 +71,10 @@ def SubgradientGraphOn (s : Set E) (φ : E → ℝ) : Set (E × E) :=
 The predicate says two things:
 
 * the effective domain is nonempty, so the function is not identically `⊤`;
-* on that effective domain, the real-valued restriction obtained from `untopD 0` is convex.
+* on that effective domain, the real-valued restriction `x ↦ (Φ x).untopD 0` is convex.
 
-This is the right amount of structure for the present refactor stage. It avoids committing yet to a
-global epigraph-based API on `WithTop ℝ`, while still recording the exact finite-locus convexity
-that Brenier will later use. -/
+This captures exactly the structure needed for the Brenier bridge: local convexity on the
+effective domain, without requiring global finiteness. -/
 def IsProperConvex (Φ : E → WithTop ℝ) : Prop :=
   (EffectiveDomain Φ).Nonempty ∧
     ConvexOn ℝ (EffectiveDomain Φ) (fun x => (Φ x).untopD 0)
@@ -88,9 +84,9 @@ noncomputable def toRealOnEffectiveDomain (Φ : E → WithTop ℝ) :
     EffectiveDomain Φ → ℝ :=
   fun x => (Φ x).untop (WithTop.lt_top_iff_ne_top.mp x.2)
 
-/-- If `Φ` is finite everywhere, forget the `WithTop` codomain and view it as an ordinary
-real-valued potential. This is the temporary compatibility wrapper used while the rest of the
-repository is migrated from real-valued convex functions to proper convex functions. -/
+/-- If `Φ` is finite everywhere, view it as an ordinary real-valued potential. This wrapper is
+used when a proper convex potential is globally finite and one needs the real-valued convex-analysis
+API. -/
 noncomputable def toRealPotential (Φ : E → WithTop ℝ) (hfin : ∀ x : E, Φ x < ⊤) : E → ℝ :=
   fun x => (Φ x).untop (WithTop.lt_top_iff_ne_top.mp (hfin x))
 

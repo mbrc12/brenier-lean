@@ -300,6 +300,47 @@ The file should end this step with:
 - then the Brenier-friendly specialization converting quadratic-type costs to pairing
   cyclical monotonicity.
 
+## Step 5A. Convert cycle inequalities to Rockafellar closed chains
+
+Files:
+
+- `OptimalTransport/CyclicMonotone.lean`
+- `OptimalTransport/Rockafellar.lean`
+
+Needed theorem:
+
+- `CCyclicallyMonotone (fun x y => -⟪x, y⟫) Γ`
+  `=>`
+  `PairingClosedChainMonotone Γ`
+
+or equivalently a direct theorem from the quadratic specialization already proved in
+`CyclicMonotone.lean` to the list-based rooted closed-chain condition used by `Rockafellar.lean`.
+
+Reason:
+
+- `CyclicMonotone.lean` now produces finite-cycle inequalities on `Γ`, indexed by `Fin (n + 1)`;
+- `Rockafellar.lean` currently consumes the list-based predicate
+  `PairingClosedChainMonotone Γ`;
+- this is the only remaining interface gap between the optimality layer and the proper Rockafellar
+  containment theorem.
+
+Likely route:
+
+- start from a nonempty list `l = [p₀, …, pₙ]` with all points in `Γ` and root `base = p₀`;
+- remove immediate repetitions if necessary, or prove directly that duplicates can be discarded
+  without increasing the closed-chain Rockafellar value;
+- convert the resulting closed chain into a `Fin (n + 1)`-indexed cycle;
+- apply pairing cyclical monotonicity to obtain
+  `rockafellarChainValue l base.1 ≤ 0`.
+
+The output of this step should be the theorem that lets
+
+- `pairing_support_of_optimal_quadratic`
+
+feed directly into
+
+- `subset_ProperSubgradientGraph_properRockafellarPotential_of_pairingClosedChainMonotone`.
+
 ## Step 5. Final assembly in Brenier.lean
 
 File:
@@ -308,8 +349,9 @@ File:
 
 Combine:
 
-- Step 4: optimality gives cyclical monotonicity of the support;
-- Step 3: cyclical monotonicity gives support inclusion in the proper subgradient graph of the
+- Step 4: optimality gives pairing cyclical monotonicity of the support for quadratic cost;
+- Step 5A: convert that cycle inequality into `PairingClosedChainMonotone` for the support;
+- Step 3: closed-chain monotonicity gives support inclusion in the proper subgradient graph of the
   proper Rockafellar potential;
 - Step 1: that potential is measurable;
 - existing proper-convex Brenier bridge: support inclusion implies graph concentration.
@@ -334,14 +376,13 @@ Once the final theorem is in place:
 2. Upgrade this to full proper Rockafellar containment.
 3. Prove measurability of `properRockafellarPotential`.
 4. Finish optimality implies cyclical monotonicity in `CyclicMonotone.lean`.
-5. Assemble the classical Brenier theorem in `Brenier.lean`.
+5. Prove `CCyclicallyMonotone -> PairingClosedChainMonotone`.
+6. Assemble the classical Brenier theorem in `Brenier.lean`.
 
 ## Immediate next theorem
 
 The highest-leverage next result is:
 
-- if `Γ` is pairing-cyclically monotone, `base ∈ Γ`, and `(x, y) ∈ Γ`,
-  then `properRockafellarPotential base Γ x < ⊤`.
+- `CCyclicallyMonotone (fun x y => -⟪x, y⟫) Γ -> PairingClosedChainMonotone Γ`.
 
-Once that is proved, the rest of the proper-convex Rockafellar route should become mostly
-packaging.
+Once that is proved, Step 5 should be mostly assembly.

@@ -1,251 +1,65 @@
 \documentclass[11pt]{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{amsmath,amssymb,mathtools}
+\usepackage{amsmath,amssymb}
 \usepackage[a4paper,margin=1in]{geometry}
 \usepackage{hyperref}
 
-\title{The Remaining Mathematical Obstruction in the Brenier Formalization}
+\title{Resolution Note: Rockafellar/Brenier Obstruction}
 \author{}
 \date{}
 
 \begin{document}
 \maketitle
 
-\section*{Purpose}
-This note explains the exact mathematical issue in the current formalization of Brenier's theorem.
-The short version is:
+\section*{What the obstruction was}
+The earlier code path forced Rockafellar potentials to be globally real-valued too early, which
+introduced an artificial boundedness bottleneck in the Brenier pipeline.
+
+\section*{What has been changed}
+The formalization now uses a proper-convex potential
+\[
+  \Phi : E \to \mathbb R \cup \{+\infty\}
+\]
+(implemented as \texttt{WithTop~\(\mathbb R\)}), and runs Rockafellar containment at that level.
+
+Concretely:
 \begin{itemize}
-\item the repository already formalizes the chain
-  \[
-    \text{convex potential} \Longrightarrow \text{subgradient support}
-    \Longrightarrow \text{gradient map a.e.} \Longrightarrow \text{graph plan};
-  \]
-\item the remaining gap is the passage
-  \[
-    \text{optimal quadratic coupling} \Longrightarrow \text{convex potential},
-  \]
-  in the full classical generality;
-\item the extra hypothesis \texttt{HasRockafellarBound} is not a genuine Brenier assumption, but an
-  artifact of the current real-valued Rockafellar construction.
+\item proper subgradient objects are defined in
+  \texttt{OptimalTransport/ProperConvex.lean};
+\item Rockafellar is implemented via
+  \texttt{properRockafellarPotential} in \texttt{OptimalTransport/Rockafellar.lean};
+\item measurability and lower-semicontinuity of this potential are proved;
+\item cyclical monotonicity yields the finiteness needed on the support-side locus;
+\item support inclusion in \(\operatorname{Graph}(\partial \Phi)\) is proved globally in the
+  proper-convex sense.
 \end{itemize}
 
-\section*{What the code currently proves}
-Let \(\pi \in \Pi(\mu,\nu)\) be a coupling on a finite-dimensional real inner product space \(E\).
-
-The repository currently proves the following.
-
-\subsection*{1. If one already has a convex potential, the plan collapses to a map}
-Suppose \(\phi : E \to \mathbb R\) is convex and
+\section*{Current Brenier chain}
+For quadratic cost \(c_\kappa(x,y)=\kappa\|x-y\|^2\), \(\kappa>0\), the code now proves:
 \[
-  \operatorname{supp}(\pi) \subseteq \operatorname{Graph}(\partial \phi).
+\text{optimality}
+\Rightarrow
+\text{pairing cyclical monotonicity of }\operatorname{supp}\pi
+\Rightarrow
+\text{proper Rockafellar containment}
+\Rightarrow
+\pi=(\mathrm{id},\nabla(\Phi^\ast))_{\#}\mu,
+\quad
+(\nabla(\Phi^\ast))_{\#}\mu=\nu,
 \]
-If \(\mu \ll m\), where \(m\) is an additive Haar measure, then:
-\begin{enumerate}
-\item \(\phi\) is differentiable \(m\)-almost everywhere;
-\item hence \(\phi\) is differentiable \(\mu\)-almost everywhere;
-\item at points of differentiability,
-  \[
-    \partial \phi(x) = \{\nabla \phi(x)\};
-  \]
-\item therefore \(\pi\) is concentrated on the graph of \(\nabla \phi\);
-\item hence
-  \[
-    \pi = (\mathrm{id}, \nabla \phi)_{\#}\mu,
-    \qquad
-    (\nabla \phi)_{\#}\mu = \nu.
-  \]
-\end{enumerate}
+under the usual absolute continuity assumption \(\mu\ll m\), with no extra boundedness
+predicate in the theorem assumptions.
 
-This part is formalized.
-
-\subsection*{2. If one already has a real-valued Rockafellar potential, the plan collapses to a map}
-The present Rockafellar file constructs a function
+\section*{Main theorem location}
+The assembled endpoint is:
 \[
-  \phi_\Gamma(x) = \sup \mathcal V_\Gamma(x)
+  \texttt{Coupling.exists\_properConvex\_potential\_of\_optimal\_quadratic}
 \]
-for a rooted family of finite-chain values \(\mathcal V_\Gamma(x)\), but only under the hypothesis
-that this supremum is finite for every \(x\).
+in \texttt{OptimalTransport/Brenier.lean}, with Euclidean specialization also provided.
 
-This is encoded by the predicate \texttt{HasRockafellarBound}.
-
-Under that hypothesis, the code proves:
-\begin{enumerate}
-\item \(\phi_\Gamma : E \to \mathbb R\) is convex;
-\item \(\Gamma \subseteq \operatorname{Graph}(\partial \phi_\Gamma)\);
-\item therefore, if \(\Gamma = \operatorname{supp}(\pi)\) and \(\mu \ll m\), then
-  \[
-    \pi = (\mathrm{id}, \nabla \phi_\Gamma)_{\#}\mu.
-  \]
-\end{enumerate}
-
-\subsection*{3. Final packaged theorem currently available}
-The current endpoint is:
-\begin{quote}
-If \(\pi\) is an optimal quadratic coupling, \(\mu \ll m\), and \(\pi\) satisfies
-\texttt{HasRockafellarBound}, then there exists a convex \(\phi\) such that
-\[
-  \pi = (\mathrm{id}, \nabla \phi)_{\#}\mu,
-  \qquad
-  (\nabla \phi)_{\#}\mu = \nu,
-\]
-and the graph plan of \(\nabla \phi\) is optimal.
-\end{quote}
-
-\section*{What \texttt{HasRockafellarBound} actually says}
-Fix a set \(\Gamma \subseteq E \times E\) and a base point
-\[
-  (x_0,y_0) \in \Gamma.
-\]
-The rooted Rockafellar value set at \(x \in E\) is made of all finite-chain expressions
-\[
-  \sum_{i<n} \langle y_i, x_{i+1} - x_i \rangle + \langle y_n, x - x_n \rangle
-\]
-over nonempty chains
-\[
-  [(x_0,y_0), (x_1,y_1), \dots, (x_n,y_n)] \subseteq \Gamma
-\]
-starting at the chosen base point.
-
-Then \texttt{HasRockafellarBound} says:
-\begin{quote}
-there exists a base point in \(\operatorname{supp}(\pi)\) such that for every \(x\), the set of all
-those chain values is bounded above in \(\mathbb R\).
-\end{quote}
-
-Equivalently, the current code assumes that the pointwise supremum defining the Rockafellar
-potential is finite everywhere.
-
-\section*{Why this is not part of classical Brenier}
-In the standard mathematical proof of Brenier's theorem, one does \emph{not} assume such a bound.
-
-The reason is that one does not start by insisting that the Rockafellar potential be
-\(\mathbb R\)-valued everywhere.
-
-Instead, one usually proceeds in one of the following equivalent ways:
-\begin{enumerate}
-\item define a proper convex potential that is allowed to take the value \(+\infty\);
-\item or define the potential on the convex hull of the relevant domain only;
-\item or prove finiteness only on the set where it is later needed.
-\end{enumerate}
-
-In all of these formulations, the supremum is allowed to exist without a global bounded-above
-hypothesis on every chain-value set.
-
-So the mathematical issue is \emph{not} that Brenier truly needs an extra assumption.
-The issue is that the present formalization took the convenient route
-\[
-  \phi_\Gamma : E \to \mathbb R
-\]
-too early.
-
-\section*{Where the current proof becomes too rigid}
-The rigid point is the combination of the following two decisions:
-\begin{enumerate}
-\item define the Rockafellar potential as an actual real-valued supremum;
-\item feed that directly into the real-valued convex and differentiability API.
-\end{enumerate}
-
-That gives a clean downstream pipeline, but it forces an upstream finiteness hypothesis.
-
-More precisely:
-\begin{itemize}
-\item the current Rockafellar theorem proves
-  \[
-    \Gamma \subseteq \operatorname{Graph}(\partial \phi)
-  \]
-  only after one knows \(\phi : E \to \mathbb R\);
-\item but classical Rockafellar gives first a \emph{proper convex} potential, not necessarily finite
-  on all of \(E\);
-\item the current \texttt{ConvexAE} file is a theorem about real-valued convex functions
-  \(\phi : E \to \mathbb R\), not proper extended-real convex functions.
-\end{itemize}
-
-So the obstruction is structural:
-\begin{quote}
-the present upstream API is too narrow for the classical Rockafellar construction, while the present
-downstream API expects exactly that narrow real-valued input.
-\end{quote}
-
-\section*{What the missing theorem should conceptually look like}
-The ideal mathematical statement is something like:
-\begin{quote}
-If \(\Gamma \subseteq E \times E\) is cyclically monotone for the pairing, then there exists a
-proper convex function \(\phi\) such that
-\[
-  \Gamma \subseteq \operatorname{Graph}(\partial \phi).
-\]
-\end{quote}
-
-Then, in the Brenier setting, one proves that \(\phi\) is finite \(\mu\)-almost everywhere on the
-source side, and therefore that \(\nabla \phi\) is meaningful \(\mu\)-almost everywhere.
-
-That is the standard textbook route.
-
-\section*{Why the issue is genuinely mathematical, not merely technical}
-One might ask whether the current bound can simply be deduced from cyclical monotonicity.
-
-In general, no: cyclical monotonicity alone does not force a globally finite real-valued
-Rockafellar supremum on all of \(E\).
-
-What cyclical monotonicity gives is the geometric structure needed for a supporting convex object.
-But that object may naturally be proper and extended-valued.
-
-So the distinction is:
-\begin{itemize}
-\item \emph{classical Rockafellar}: a proper convex potential;
-\item \emph{current implementation}: a globally finite real-valued potential.
-\end{itemize}
-
-The latter is stronger, and that is exactly where the extra assumption enters.
-
-\section*{What a correct fix would look like}
-To remove the gap in the mathematically right way, the code should be refactored along the following
-lines.
-
-\subsection*{Option A. Extended-real Rockafellar first}
-\begin{enumerate}
-\item Replace the current real-valued Rockafellar potential by a proper convex potential allowed to
-  take the value \(+\infty\).
-\item Prove the Rockafellar containment theorem at that level:
-  \[
-    \Gamma \subseteq \operatorname{Graph}(\partial \phi).
-  \]
-\item Then prove a Brenier-specific finiteness theorem showing that in the quadratic optimal
-  transport setting, \(\phi\) is finite \(\mu\)-almost everywhere.
-\item Finally adapt the downstream gradient-collapse argument to that proper-convex setting.
-\end{enumerate}
-
-\subsection*{Option B. Localized real-valued potential}
-\begin{enumerate}
-\item Restrict the construction to a set on which the supremum is known to be finite.
-\item Prove that this suffices for the support of the optimal plan.
-\item Run the differentiability and graph-plan argument only on that region.
-\end{enumerate}
-
-This is more ad hoc, and less faithful to the standard convex-analytic statement, but may be easier
-to formalize.
-
-\section*{Why I stopped before coding this refactor immediately}
-The missing step is no longer a short theorem in the current language. It requires choosing a new
-mathematical interface.
-
-In particular, one has to decide:
-\begin{itemize}
-\item what codomain to use for the proper convex potential;
-\item how to formulate subgradients for that codomain;
-\item how to connect that formulation back to the existing real-valued differentiability theorems.
-\end{itemize}
-
-This is why the current code isolates the issue but does not yet resolve it completely.
-
-\section*{The shortest conversation to have next}
-The right next design question is:
-\begin{quote}
-Should the repository move to a proper extended-valued convex potential, or should it localize the
-real-valued construction only where the Brenier argument needs finiteness?
-\end{quote}
-
-That is the genuine mathematical fork in the road.
+\section*{Status}
+The mathematical obstruction documented in the earlier note is resolved in the current codebase.
 
 \end{document}
+

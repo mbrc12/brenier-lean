@@ -10,18 +10,16 @@ open Filter
 open scoped ENNReal NNReal
 
 /-!
-This file proves the basic compactness and existence statements for couplings in the weak topology.
+This file proves the basic compactness and existence results for optimal transport couplings in
+the weak topology on Polish spaces.
 
-Unlike the earlier compact-space warm-up, the intended setting here is already the one used in the
-generic Villani-style existence theorem:
+The main results are:
 
-* `X` and `Y` are Polish spaces with their Borel sigma-algebras;
-* the set of couplings of fixed marginals is shown to be closed and tight, hence compact by
-  Prokhorov;
-* as an immediately usable corollary, bounded continuous nonnegative costs admit minimizers.
-
-The final lower-semicontinuous `ℝ≥0∞` existence theorem sits one step beyond this file: it only
-is proved here by combining Portmanteau with truncated costs and a minimizing-sequence argument.
+* The set of couplings with fixed marginals is closed and tight, hence compact by Prokhorov's
+  theorem.
+* A lower-semicontinuous `ℝ≥0∞`-valued transport cost admits a minimizing coupling. The proof
+  uses compactness of the coupling set and the Portmanteau theorem with a truncation argument.
+* A bounded continuous nonnegative cost admits a minimizing coupling (via direct weak compactness).
 -/
 
 variable {X Y : Type*} [MeasurableSpace X] [MeasurableSpace Y]

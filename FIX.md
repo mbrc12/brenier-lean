@@ -1,5 +1,29 @@
 # Plan to Refactor Potentials to `ℝ ∪ {+∞}`
 
+## Completion status (April 2026)
+
+This migration is now completed in the repository.
+
+Completed outcomes:
+
+- The proper-convex layer is implemented in
+  [ProperConvex.lean](/Users/subwave/dev/lean/OptimalTransport/OptimalTransport/ProperConvex.lean),
+  with `ProperSubgradient`, `ProperSubgradientGraph`, and `EffectiveDomain`.
+- Rockafellar has been migrated to the extended-real potential
+  `properRockafellarPotential : E → WithTop ℝ` in
+  [Rockafellar.lean](/Users/subwave/dev/lean/OptimalTransport/OptimalTransport/Rockafellar.lean),
+  and the core containment theorem is proved in this setting.
+- The finite-on-support replacement for the old boundedness bottleneck is implemented:
+  cyclical monotonicity gives pointwise finiteness on the relevant source set, then global proper
+  subgradient containment.
+- The Brenier bridge is now proper-convex and no longer depends on
+  `HasRockafellarBound`; the final quadratic endpoint is assembled in
+  [Brenier.lean](/Users/subwave/dev/lean/OptimalTransport/OptimalTransport/Brenier.lean).
+- The old `HasRockafellarBound` assumption is removed from active code paths.
+
+Residual compatibility lemmas with stronger finite-everywhere assumptions are intentionally kept as
+auxiliary corollaries, but they are no longer required for the main theorem pipeline.
+
 This note describes how to remove the current `HasRockafellarBound` bottleneck by moving the
 Rockafellar/Brenier potential layer from real-valued convex functions
 `φ : E → ℝ` to proper extended-real-valued convex functions

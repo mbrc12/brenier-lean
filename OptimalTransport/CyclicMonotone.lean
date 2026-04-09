@@ -15,22 +15,25 @@ open Filter
 open scoped BigOperators
 
 /-!
-This file introduces cyclical monotonicity and the first optimality-to-geometry theorem.
-
-For the direct perturbation argument, the real point is continuity, not global boundedness.
-Indeed, once one has a strict cycle gap at finitely many support points, continuity lets one shrink
-to small product neighborhoods on which the same strict inequality still holds uniformly. This is
-the local step that later lets finite-cost assumptions replace any global boundedness hypothesis.
+This file develops cyclical monotonicity and the direct perturbation argument showing that an
+optimal coupling must have `c`-cyclically monotone support.
 
 The main definition is:
 
-* `CCyclicallyMonotone c Γ`: the usual finite-cycle inequality for a set `Γ ⊆ X × Y`.
+* `CCyclicallyMonotone c Γ`: the standard finite-cycle inequality for a set `Γ ⊆ X × Y`.
 
-The main local theorem proved in this file is:
+The main local theorem is:
 
-* if a continuous cost has a strict cycle gap at a finite family of pairwise distinct points,
-  then there are pairwise disjoint open rectangles around those points on which the same strict
-  cycle gap persists pointwise.
+* If a continuous cost has a strict cycle gap at a finite family of pairwise distinct points, then
+  there exist pairwise disjoint open rectangles around those points on which the strict cycle gap
+  persists, together with a uniform bound on the diagonal and cyclic cross costs.
+
+The file then builds the full perturbation competitor out of these local pieces and proves the
+optimality-to-cyclical-monotonicity theorem: a continuous real-valued optimal coupling with finite
+cost has `c`-cyclically monotone support.
+
+Finally, for quadratic costs the cyclical monotonicity condition simplifies to a pairing inequality,
+giving the Brenier-friendly endpoint used in the Rockafellar construction.
 -/
 
 variable {X Y : Type*}
@@ -173,9 +176,8 @@ lemma continuous_localCostControl {c : X → Y → ℝ}
 
 /-- The local rectangles witnessing a strict cycle gap can be chosen so that the cost is also
 uniformly bounded on every diagonal rectangle `Uᵢ × Vᵢ` and on every cyclic rectangle
-`Uᵢ × Vᵢ₊₁`. This is the exact place where continuity replaces a global boundedness assumption:
-later, once `∫ c dπ < ∞` is known for the original plan, these local bounds are enough to show the
-newly inserted competitor pieces still have finite cost. -/
+`Uᵢ × Vᵢ₊₁`. Continuity replaces any global boundedness assumption: once `∫ c dπ < ∞`,
+these local bounds ensure the competitor pieces still have finite cost. -/
 lemma exists_pairwiseDisjoint_open_rectangles_of_cycleGap_pos_with_costControl
     {c : X → Y → ℝ} (hc : Continuous fun z : X × Y ↦ c z.1 z.2) {n : ℕ}
     {p : Fin (n + 1) → X × Y} (hp : Function.Injective p) (hgap : 0 < cycleGap c p) :
@@ -307,14 +309,11 @@ lemma exists_pairwiseDisjoint_open_rectangles_of_cycleGap_pos_with_costControl
 
 /-- The full local data extracted from a strict cycle-gap witness.
 
-This packages exactly the information needed later in the perturbation proof:
+This packages the information needed by the perturbation construction:
 
 * pairwise disjoint open rectangles around the witness points;
 * persistence of the strict cycle gap on those rectangles;
-* a single uniform bound for the diagonal and cyclic cross costs on those rectangles.
-
-The point of introducing this structure is to keep the later global competitor construction from
-repeating the same long tuple of hypotheses. -/
+* a single uniform bound for the diagonal and cyclic cross costs on those rectangles. -/
 structure CycleGapNeighborhoodData {n : ℕ} (c : X → Y → ℝ) (p : Fin (n + 1) → X × Y) where
   /-- The source-side neighborhoods. -/
   U : Fin (n + 1) → Set X
@@ -342,13 +341,7 @@ structure CycleGapNeighborhoodData {n : ℕ} (c : X → Y → ℝ) (p : Fin (n +
   cross_bound :
     ∀ i {x y}, x ∈ U i → y ∈ V (i + 1) → |c x y| < B
 
-/-- Package the output of
-`exists_pairwiseDisjoint_open_rectangles_of_cycleGap_pos_with_costControl`
-as a single reusable object.
-
-This is the clean endpoint of Step 4A: once a strict cycle-gap witness is fixed, all later parts of
-the perturbation proof can refer to one object `hdata` instead of repeatedly unpacking a long
-nested tuple of neighborhoods, openness, disjointness, and local bounds. -/
+/-- Package the output of the local rectangle construction as a single reusable object. -/
 lemma exists_cycleGapNeighborhoodData_of_cycleGap_pos
     {c : X → Y → ℝ} (hc : Continuous fun z : X × Y ↦ c z.1 z.2) {n : ℕ}
     {p : Fin (n + 1) → X × Y} (hp : Function.Injective p) (hgap : 0 < cycleGap c p) :
@@ -1327,9 +1320,8 @@ section ReplacementCostDrop
 variable [MeasurableSpace X] [MeasurableSpace Y] [Nonempty (X × Y)]
   [TopologicalSpace X] [TopologicalSpace Y]
 
-/-- The product law of the normalized local pieces. Sampling from this measure chooses one point
-from each local rectangle independently. It is the ambient probability measure under which the
-diagonal and cyclic cross costs combine into `cycleGap`. -/
+/-- The independent product measure of the normalized local pieces. Sampling from this measure
+chooses one point from each local rectangle independently. -/
 noncomputable def replacementPiMeasure
     {n : ℕ} {μ : ProbabilityMeasure X} {ν : ProbabilityMeasure Y}
     (π : Coupling μ ν) {c : X → Y → ℝ} {p : Fin (n + 1) → X × Y}
@@ -1337,8 +1329,8 @@ noncomputable def replacementPiMeasure
     ProbabilityMeasure (Fin (n + 1) → X × Y) :=
   ProbabilityMeasure.pi fun i ↦ localNormalizedPiece π hdata i
 
-/-- The measure underlying the replacement product probability measure. This alias is only here to
-keep later integral expressions readable. -/
+/-- Alias for the measure underlying `replacementPiMeasure`, keeping later integral
+expressions readable. -/
 noncomputable abbrev replacementPiMeasureMeasure
     {n : ℕ} {μ : ProbabilityMeasure X} {ν : ProbabilityMeasure Y}
     (π : Coupling μ ν) {c : X → Y → ℝ} {p : Fin (n + 1) → X × Y}
@@ -1580,9 +1572,8 @@ lemma integral_cost_oldPiece_sub_integral_cost_newPiece_eq_commonRemovableMass_m
             rw [← integral_sub hdiag_whole hcross_whole]
             simp [cycleGap]
 
-/-- Under the replacement product law, the cycle gap is almost surely positive. This turns the
-local pointwise gap on the rectangles into the strict positivity needed for the global cost-drop
-argument. -/
+/-- Under the independent-product law of the normalized local pieces, the cycle gap is almost
+surely positive. -/
 lemma integral_cycleGap_replacementPiMeasure_pos
     {n : ℕ} [NeZero n] {μ : ProbabilityMeasure X} {ν : ProbabilityMeasure Y}
     [OpensMeasurableSpace X] [OpensMeasurableSpace Y]
@@ -1670,5 +1661,192 @@ lemma integral_cost_newPiece_lt_integral_cost_oldPiece
   linarith [hdiff, hpos_rhs]
 
 end ReplacementCostDrop
+
+section OptimalityToCyclicMonotone
+
+variable [MeasurableSpace X] [MeasurableSpace Y] [Nonempty (X × Y)]
+  [TopologicalSpace X] [TopologicalSpace Y]
+  [OpensMeasurableSpace X] [OpensMeasurableSpace Y]
+  [OpensMeasurableSpace (X × Y)]
+
+/-- The competitor coupling constructed from a strict cycle-gap witness has strictly smaller total
+cost than the original coupling. -/
+lemma transportCost_competitorCoupling_lt
+    {n : ℕ} [NeZero n] {μ : ProbabilityMeasure X} {ν : ProbabilityMeasure Y}
+    {c : X → Y → ℝ} (hc : Continuous fun z : X × Y ↦ c z.1 z.2)
+    {p : Fin (n + 1) → X × Y} (hdata : CycleGapNeighborhoodData c p)
+    (π : Coupling μ ν)
+    (hπ :
+      Integrable (fun z : X × Y ↦ c z.1 z.2) (π.toTransportPlan : Measure (X × Y)))
+    (hmem : ∀ i, p i ∈ ((π.toTransportPlan : TransportPlan X Y) : Measure (X × Y)).support) :
+    transportCost c (competitorCoupling π hdata).toTransportPlan <
+      transportCost c π.toTransportPlan := by
+  let f : X × Y → ℝ := fun z ↦ c z.1 z.2
+  have hold :
+      Integrable f (oldPiece π hdata : Measure (X × Y)) :=
+    integrable_cost_oldPiece hc hdata π hmem
+  have hnew :
+      Integrable f (newPiece π hdata : Measure (X × Y)) :=
+    integrable_cost_newPiece hc hdata π hmem
+  have h_old_le :
+      (oldPiece π hdata : Measure (X × Y)) ≤ (π.toTransportPlan : Measure (X × Y)) :=
+    oldPiece_le_toFiniteMeasure π hdata
+  have hsub :
+      Integrable f
+        (((π.toTransportPlan : Measure (X × Y)) - (oldPiece π hdata : Measure (X × Y)))) := by
+    exact hπ.mono_measure Measure.sub_le
+  have hsplit_pi :
+      transportCost c π.toTransportPlan =
+        ∫ z, f z ∂(((π.toTransportPlan : Measure (X × Y)) -
+          (oldPiece π hdata : Measure (X × Y)))) +
+          ∫ z, f z ∂(oldPiece π hdata : Measure (X × Y)) := by
+    have hadd :=
+      integral_add_measure
+        (μ := ((π.toTransportPlan : Measure (X × Y)) -
+          (oldPiece π hdata : Measure (X × Y))))
+        (ν := (oldPiece π hdata : Measure (X × Y)))
+        hsub hold
+    simpa [transportCost, f, Measure.sub_add_cancel_of_le h_old_le] using hadd
+  have hsplit_comp :
+      transportCost c (competitorCoupling π hdata).toTransportPlan =
+        ∫ z, f z ∂(((π.toTransportPlan : Measure (X × Y)) -
+          (oldPiece π hdata : Measure (X × Y)))) +
+          ∫ z, f z ∂(newPiece π hdata : Measure (X × Y)) := by
+    have hadd :=
+      integral_add_measure
+        (μ := ((π.toTransportPlan : Measure (X × Y)) -
+          (oldPiece π hdata : Measure (X × Y))))
+        (ν := (newPiece π hdata : Measure (X × Y)))
+        hsub hnew
+    simpa [transportCost, competitorCoupling, competitorMeasure, f] using hadd
+  have hdrop :
+      ∫ z, f z ∂(newPiece π hdata : Measure (X × Y)) <
+        ∫ z, f z ∂(oldPiece π hdata : Measure (X × Y)) := by
+    simpa [f] using integral_cost_newPiece_lt_integral_cost_oldPiece (n := n) hc hdata π hmem
+  linarith [hsplit_pi, hsplit_comp, hdrop]
+
+/-- A continuous real-valued optimal coupling with finite cost has `c`-cyclically monotone support.
+
+The proof is the finite-cycle perturbation argument: if a strict cycle-gap witness existed in
+the support, the local rectangles from `CycleGapNeighborhoodData` would produce a competitor
+coupling with strictly smaller cost, contradicting optimality. -/
+theorem cCyclicallyMonotone_support_of_optimal
+    {μ : ProbabilityMeasure X} {ν : ProbabilityMeasure Y}
+    [T2Space X] [T2Space Y]
+    {c : X → Y → ℝ} (hc : Continuous fun z : X × Y ↦ c z.1 z.2)
+    (π : Coupling μ ν)
+    (hopt : ∀ ρ : Coupling μ ν,
+      transportCost c π.toTransportPlan ≤ transportCost c ρ.toTransportPlan)
+    (hπ :
+      Integrable (fun z : X × Y ↦ c z.1 z.2) (π.toTransportPlan : Measure (X × Y))) :
+    CCyclicallyMonotone c
+      (((π.toTransportPlan : TransportPlan X Y) : Measure (X × Y)).support) := by
+  intro n p hp hmem
+  by_cases hn : n = 0
+  · subst hn
+    simp
+  · letI : NeZero n := ⟨hn⟩
+    have hgap_not_pos : ¬ 0 < cycleGap c p := by
+      intro hgap
+      obtain ⟨hdata⟩ := exists_cycleGapNeighborhoodData_of_cycleGap_pos hc hp hgap
+      have hlt :
+          transportCost c (competitorCoupling π hdata).toTransportPlan <
+            transportCost c π.toTransportPlan :=
+        transportCost_competitorCoupling_lt (n := n) hc hdata π hπ hmem
+      exact not_lt_of_ge (hopt (competitorCoupling π hdata)) hlt
+    exact sub_nonpos.mp (le_of_not_gt hgap_not_pos)
+
+end OptimalityToCyclicMonotone
+
+section PairingSpecialization
+
+variable {E : Type*} [NormedAddCommGroup E]
+
+/-- The quadratic cost is a Brenier-type cost: an `x`-only term, a `y`-only term, and a negative
+pairing term. This identity is the algebraic bridge from quadratic optimal transport to pairing
+cyclical monotonicity. -/
+lemma quadraticCost_eq_norm_sq_add_norm_sq_sub_two_mul_inner
+    [InnerProductSpace ℝ E] (κ : ℝ) (x y : E) :
+    quadraticCost κ x y =
+      κ * ‖x‖ ^ (2 : ℕ) + κ * ‖y‖ ^ (2 : ℕ) - (2 * κ) * inner ℝ x y := by
+  rw [quadraticCost, norm_sub_sq_real]
+  ring_nf
+
+/-- Function-level version of the quadratic/pairing decomposition. -/
+lemma quadraticCost_eq_pairing_form [InnerProductSpace ℝ E] (κ : ℝ) :
+    quadraticCost κ =
+      (fun x y : E ↦ κ * ‖x‖ ^ (2 : ℕ) + κ * ‖y‖ ^ (2 : ℕ) - (2 * κ) * inner ℝ x y) := by
+  funext x y
+  exact quadraticCost_eq_norm_sq_add_norm_sq_sub_two_mul_inner κ x y
+
+/-- The quadratic cost is continuous on `E × E`. -/
+lemma continuous_quadraticCost (κ : ℝ) :
+    Continuous fun z : E × E ↦ quadraticCost κ z.1 z.2 := by
+  have hpow : Continuous fun z : E × E ↦ ‖z.1 - z.2‖ ^ (2 : ℕ) :=
+    ((continuous_fst : Continuous fun z : E × E ↦ z.1).sub
+      (continuous_snd : Continuous fun z : E × E ↦ z.2)).norm.pow 2
+  simpa [quadraticCost] using (continuous_const.mul hpow)
+
+/-- Optimality for the quadratic cost implies the weighted pairing inequality on every finite
+cycle in the support.
+
+Dividing by the positive coefficient `2κ` yields the standard Brenier pairing inequality. -/
+theorem pairing_weighted_support_of_optimal_quadratic
+    [MeasurableSpace E] [Nonempty (E × E)]
+    [OpensMeasurableSpace E] [OpensMeasurableSpace (E × E)] [InnerProductSpace ℝ E]
+    {μ ν : ProbabilityMeasure E}
+    {κ : ℝ} (π : Coupling μ ν)
+    (hopt : ∀ ρ : Coupling μ ν,
+      transportCost (quadraticCost κ) π.toTransportPlan ≤
+        transportCost (quadraticCost κ) ρ.toTransportPlan)
+    (hπ :
+      Integrable (fun z : E × E ↦ quadraticCost κ z.1 z.2)
+        (π.toTransportPlan : Measure (E × E))) :
+    ∀ n (p : Fin (n + 1) → E × E), Function.Injective p →
+      (∀ i,
+        p i ∈ ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support) →
+        (2 * κ) * (∑ i, inner ℝ (p i).1 (p i).2) ≥
+          (2 * κ) * (∑ i, inner ℝ (p i).1 (p (i + 1)).2) := by
+  let Γ : Set (E × E) := ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support
+  have hmono_quad :
+      CCyclicallyMonotone (quadraticCost κ) Γ :=
+    cCyclicallyMonotone_support_of_optimal (c := quadraticCost κ)
+      (continuous_quadraticCost κ) π hopt hπ
+  have hmono_pairing_form :
+      CCyclicallyMonotone
+        (fun x y ↦ κ * ‖x‖ ^ (2 : ℕ) + κ * ‖y‖ ^ (2 : ℕ) - (2 * κ) * inner ℝ x y) Γ := by
+    simpa [Γ, quadraticCost_eq_pairing_form (E := E) κ] using hmono_quad
+  exact cCyclicallyMonotone_of_pairing
+    (a := fun x ↦ κ * ‖x‖ ^ (2 : ℕ))
+    (b := fun y ↦ κ * ‖y‖ ^ (2 : ℕ))
+    (κ := 2 * κ)
+    (Γ := Γ)
+    hmono_pairing_form
+
+/-- For a strictly positive quadratic coefficient, optimality implies the genuine pairing
+cyclical-monotonicity inequality on the support. -/
+theorem pairing_support_of_optimal_quadratic
+    [MeasurableSpace E] [Nonempty (E × E)]
+    [OpensMeasurableSpace E] [OpensMeasurableSpace (E × E)] [InnerProductSpace ℝ E]
+    {μ ν : ProbabilityMeasure E}
+    {κ : ℝ} (hκ : 0 < κ) (π : Coupling μ ν)
+    (hopt : ∀ ρ : Coupling μ ν,
+      transportCost (quadraticCost κ) π.toTransportPlan ≤
+        transportCost (quadraticCost κ) ρ.toTransportPlan)
+    (hπ :
+      Integrable (fun z : E × E ↦ quadraticCost κ z.1 z.2)
+        (π.toTransportPlan : Measure (E × E))) :
+    ∀ n (p : Fin (n + 1) → E × E), Function.Injective p →
+      (∀ i,
+        p i ∈ ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support) →
+        (∑ i, inner ℝ (p i).1 (p i).2) ≥
+          ∑ i, inner ℝ (p i).1 (p (i + 1)).2 := by
+  intro n p hp hmem
+  have hweighted :=
+    pairing_weighted_support_of_optimal_quadratic (π := π) (κ := κ) hopt hπ n p hp hmem
+  have h2κ : 0 < 2 * κ := by nlinarith
+  exact le_of_mul_le_mul_left hweighted h2κ
+
+end PairingSpecialization
 
 end OptimalTransport
