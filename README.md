@@ -15,7 +15,8 @@ In words: an optimal coupling for the quadratic cost with absolutely continuous 
 
 The Lean 4 signature of the main theorem is as follows. `WithTop` and `untopD` are used to handle the extended real-valued nature of the convex potential, and `IsProperConvex` encodes the proper convexity condition. The `graph` construction encodes the transport plan concentrated on the graph of the gradient map, and the support inclusion ensures the plan is concentrated on the subgradient graph of the potential.
 
-We include short comments (lines starting with `--`) for a guide on how to read this statement.
+We include short comments (lines starting with `--`) for a guide on how to read this statement. Here
+`quadraticCost κ` denotes the cost function $\kappa\|x - y\|^2$.
 
 ```lean4
 theorem exists_properConvex_potential_of_optimal_quadratic
