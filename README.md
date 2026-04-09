@@ -1,17 +1,39 @@
-# Optimal Transport: Brenier's Theorem in Lean 4
+# OptimalTransport
 
 A formalization of **Brenier's theorem** for quadratic optimal transport in Lean 4.
 
 ## Main result
 
-Let $E$ be a finite-dimensional real inner product space with Borel σ-algebra and additive Haar measure $m$, let $\kappa > 0$, and let $\mu, \nu$ be probability measures on $E$ with $\mu \ll m$. If $\pi$ is a coupling of $\mu$ and $\nu$ that minimizes the quadratic transport cost $\kappa\|x - y\|^2$, then there exists a proper convex potential $\Phi : E \to \WithTop{\mathbb{R}}$ such that:
+Let $E$ be a finite-dimensional real inner product space with Borel σ-algebra and additive Haar measure $m$, let $\kappa > 0$, and let $\mu, \nu$ be probability measures on $E$ with $\mu \ll m$. If $\pi$ is a coupling of $\mu$ and $\nu$ that minimizes the quadratic transport cost $\kappa\|x - y\|^2$, then there exists a proper convex potential $\Phi : E \to [-\infty, +\infty]$ such that:
 
 1. $\Phi$ is proper convex and measurable,
-2. $\pi = \mathrm{graph}_\mu(\nabla \Phi^\star)$, where $\Phi^\star(x) = (\Phi(x)).\mathrm{untopD}\;0$ is the real-valued representative,
-3. $\nu = (\nabla \Phi^\star)_\sharp\,\mu$,
+2. $\pi = \mathrm{graph}_\mu(\nabla \varphi)$, where $\varphi$ is the real-valued representative of $\Phi$ on its effective domain,
+3. $\nu = (\nabla\varphi)_\sharp\,\mu$,
 4. $\mathrm{supp}(\pi) \subseteq \partial\Phi$ (the subdifferential graph of $\Phi$).
 
-In words: an optimal coupling for the quadratic cost with absolutely continuous source measure is uniquely determined by the gradient of a proper convex function, simultaneously giving the Monge map $\nabla\Phi^\star$ and the pushforward identity $\nu = (\nabla\Phi^\star)_\sharp\mu$.
+In words: an optimal coupling for the quadratic cost with absolutely continuous source measure is uniquely determined by the gradient of a proper convex function, simultaneously giving the Monge map $\nabla\varphi$ and the pushforward identity $\nu = (\nabla\varphi)_\sharp\mu$.
+
+The Lean 4 signature of the main theorem is as follows. `WithTop` and `untopD` are used to handle the extended real-valued nature of the convex potential, and `IsProperConvex` encodes the proper convexity condition. The `graph` construction encodes the transport plan concentrated on the graph of the gradient map, and the support inclusion ensures the plan is concentrated on the subgradient graph of the potential.
+
+```
+theorem exists_properConvex_potential_of_optimal_quadratic
+    (π : Coupling μ ν) {κ : ℝ} (hκ : 0 < κ)
+    (hopt : ∀ ρ : Coupling μ ν,
+      transportCost (quadraticCost κ) π.toTransportPlan ≤
+        transportCost (quadraticCost κ) ρ.toTransportPlan)
+    (hπ : Integrable (fun z : E × E ↦ quadraticCost κ z.1 z.2)
+      (π.toTransportPlan : Measure (E × E)))
+    (hμ_ac : (μ : Measure E) ≪ m) :
+    ∃ Φ : E → WithTop ℝ,
+      IsProperConvex Φ ∧
+      Measurable Φ ∧
+      π.toTransportPlan =
+        TransportPlan.graph μ (gradient fun x => (Φ x).untopD 0)
+          (measurable_gradient fun x => (Φ x).untopD 0) ∧
+      ν = μ.map (measurable_gradient fun x => (Φ x).untopD 0).aemeasurable ∧
+      ((π.toTransportPlan : TransportPlan E E) : Measure (E × E)).support ⊆
+        ProperSubgradientGraph Φ
+```
 
 ## Proof outline
 
