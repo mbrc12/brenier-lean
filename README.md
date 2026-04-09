@@ -17,7 +17,7 @@ The Lean 4 signature of the main theorem is as follows. `WithTop` and `untopD` a
 
 We include short comments (lines starting with `--`) for a guide on how to read this statement.
 
-```
+```lean4
 theorem exists_properConvex_potential_of_optimal_quadratic
     -- π is a coupling of μ and ν, and κ > 0 (hκ is a proof of that)
     (π : Coupling μ ν) {κ : ℝ} (hκ : 0 < κ)
